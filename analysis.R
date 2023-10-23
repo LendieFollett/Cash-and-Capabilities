@@ -1,10 +1,7 @@
 rm(list = ls())
 library(rstan) #MCMC sampling
-library(ggplot2) #graphics
 library(reshape2) #wide-to-long melting
-library(plyr) #data manipulation
-library(dplyr) #piping, data manipulation
-library(tidyr) #data manipulation
+library(tidyverse)
 library(randomForest) #estimate propensity scores
 library(Matching) #matching treatment, control groups
 library(loo) #leave one out crossvalidation
@@ -15,7 +12,7 @@ options(warn=-1)
 RNGkind(sample.kind = "Rounding")
 # Read in Data ---------------------------
 
-kenya <- read.csv("ctovc_final.csv")
+kenya <- read.csv("ctovc_final2023.csv")
 
 # Propensity Score Matching ---------------------------
 
@@ -115,8 +112,9 @@ full_X <- kenya%>%
          treated_year_sex = treated*year*head_sex)%>% 
   dplyr::select(-c(hhcode, location, 
                    expenditure, food, micro, education1, education2, health, diversity, 
-                   stunting, wasting, schooling,enrolled, illness1, illness2,
-                   sample_nutrition, sample_education, initial_exp))  %>% #remove from X matrix
+                   stunting, wasting, underweight, schooling,enrolled, illness1, illness2,
+                   sample_nutrition, sample_education, initial_exp,
+                   large,             small,            poultry,           animals ))  %>% #remove from X matrix
   dplyr::select(c(treated,head_sex,year, treated_year, treated_sex, year_sex, treated_year_sex), everything()) %>% #reorder
   as.matrix()
 
@@ -130,6 +128,11 @@ education_X <- full_X[kenya$sample_education == 1,]
 education_X_cntr <- full_X_cntr[kenya$sample_education == 1,]
 education_data <- kenya[kenya$sample_education == 1,] 
 
+#education X matrix for nutrition
+nutrition_X <- full_X[kenya$sample_nutrition == 1,]
+nutrition_X_cntr <- full_X_cntr[kenya$sample_nutrition == 1,]
+nutrition_data <- kenya[kenya$sample_nutrition == 1,] 
+
 
 #---STAN MODEL PREP------------
 #to save space, only keep specified parameters; "lp__" is automatically included
@@ -137,23 +140,19 @@ par_keep <- c("f_pred","f_pred_cntr", "c", "c_cntr","u", "u_cntr","beta",
               "sigma_a", "sigma_v", "sigma_l", 
               "gamma1", "gamma2", "phi", "rho", "mu_a", "alpha", "tau")
 
-#RUN MCMC - OR, read the RDS file in next section
-# nutrition expenditure - food ---------------------------
 
-food_sampled <- do_sampling(y=ihs_trans(kenya$food),
+ggplot(data = kenya) +
+  geom_histogram(aes(x = illness1))
+
+#RUN MCMC - OR, read the RDS file in next section
+# illness 1 ---------------------------
+#very left skewed
+illness1_sampled <- do_sampling(y=(kenya$illness1),
                             X=full_X, 
                             X_cntr = full_X_cntr,
                             hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
                             file = "BSFA_model.stan")
-saveRDS(food_sampled, file = paste(subfolder,"food_sampled.rds", sep = "/"))
-
-# nutrition expenditure - micro ---------------------------
-micro_sampled <- do_sampling(y=ihs_trans(kenya$micro),
-                             X=full_X, 
-                             X_cntr = full_X_cntr,
-                             hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
-                             file = "BSFA_model.stan" )
-saveRDS(micro_sampled, file =paste(subfolder, "micro_sampled.rds", sep = "/"))
+saveRDS(illness1_sampled, file = paste(subfolder,"illness1_sampled.rds", sep = "/"))
 
 # nutrition expenditure - diversity ---------------------------
 #standardize compared to control
@@ -164,14 +163,32 @@ diversity_sampled <- do_sampling(y=y_stand(kenya$diversity, kenya),
                                  file = "BSFA_model.stan")
 saveRDS(diversity_sampled, file = paste(subfolder,"diversity_sampled.rds", sep = "/"))
 
-# expenditure - health ---------------------------
 
-health_sampled <- do_sampling(y=ihs_trans(kenya$health),
-                              full_X, 
-                              X_cntr = full_X_cntr,
-                              hh_id=kenya$hhcode, loc_id=kenya$location,kappa = 10,
-                              file = "BSFA_model.stan")
-saveRDS(health_sampled, file = paste(subfolder,"health_sampled.rds", sep = "/"))
+
+#ONLY DEFINED FOR A SUBSAMPLE
+# nutrition - stunting ---------------------------
+stunting_sampled <- do_sampling(y=(kenya$stunting),
+                             X=full_X, 
+                             X_cntr = full_X_cntr,
+                             hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
+                             file = "BSFA_model.stan" )
+saveRDS(stunting_sampled, file =paste(subfolder, "stunting_sampled.rds", sep = "/"))
+
+# nutrition - wasting ---------------------------
+wasting_sampled <- do_sampling(y=(kenya$wasting),
+                                X=full_X, 
+                                X_cntr = full_X_cntr,
+                                hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
+                                file = "BSFA_model.stan" )
+saveRDS(wasting_sampled, file =paste(subfolder, "wasting_sampled.rds", sep = "/"))
+
+# nutrition - underweight ---------------------------
+underweight_sampled <- do_sampling(y=(kenya$underweight),
+                                X=full_X, 
+                                X_cntr = full_X_cntr,
+                                hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
+                                file = "BSFA_model.stan" )
+saveRDS(underweight_sampled, file =paste(subfolder, "underweight_sampled.rds", sep = "/"))
 
 # education - schooling ---------------------------
 
