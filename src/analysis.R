@@ -5,6 +5,7 @@ library(tidyverse)
 library(randomForest) #estimate propensity scores
 library(Matching) #matching treatment, control groups
 library(loo) #leave one out crossvalidation
+
 source("functions.R")
 options(mc.cores = parallel::detectCores()) 
 rstan_options(auto_write = TRUE)
@@ -87,7 +88,7 @@ ggsave( "Prop_matching.pdf", width = 9, height =7, units = "in" )
 
 #Original or Matched analysis
 #note:results will be saved in a pre-existing file with this name
-subfolder <- "Original"#"Matched"#
+subfolder <- "output/Original"#"output/Matched"#
 
 #If matching, subset kenya data
 if (subfolder == "Original"){

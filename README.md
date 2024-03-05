@@ -1,25 +1,35 @@
----
-title: "README"
-author: "Lendie Follett, Heath Henderson"
-date: "6/5/2020"
-output: github_document
----
+README
+================
+Lendie Follett, Heath Henderson
+6/5/2020
+
 # Cash and Capabilities
 
-Bayesian framework for estimating overall capabilities as well as treatment effects on capabilities, choices, and functionings in the Kenya's unconditional cash-transfer scheme, Cash Transfer for Orphans and Vulnerable Children (CT-OVC).
+Bayesian framework for estimating overall capabilities as well as
+treatment effects on capabilities, choices, and functionings in the
+Kenya’s unconditional cash-transfer scheme, Cash Transfer for Orphans
+and Vulnerable Children (CT-OVC).
 
 ## Usage
-Save functions.R, analysis.R, BSFA_model.stan, and ctovc_final.csv in the same directory.
 
-Set your working directory to the same directory. You can use setwd(). For example, 
-```r
+Save functions.R, analysis.R, BSFA_model.stan, and ctovc_final.csv in
+the same directory.
+
+Set your working directory to the same directory. You can use setwd().
+For example,
+
+``` r
 setwd("/Users/Follett/Documents/Research/BSFA")
 ```
 
-Within this same directory create two new folders named "Original" and "Matched". This is where the corresponding results and plots will be saved. 
+Within this same directory create two new folders named “Original” and
+“Matched”. This is where the corresponding results and plots will be
+saved.
 
-Before you can load the packages, you will need to install them if you have not already done so. Code may look like:
-```r
+Before you can load the packages, you will need to install them if you
+have not already done so. Code may look like:
+
+``` r
 install.packages("rstan") #MCMC sampling
 install.packages("ggplot2") #graphics
 install.packages("reshape2") #wide-to-long melting
@@ -30,8 +40,11 @@ install.packages("randomForest") #estimate propensity scores
 install.packages("Matching") #matching treatment, control groups
 install.packages("loo") #leave one out crossvalidation
 ```
-After each package is installed you can proceed with the code in analysis.R starting with 
-```r
+
+After each package is installed you can proceed with the code in
+analysis.R starting with
+
+``` r
 library(rstan) #MCMC sampling
 library(ggplot2) #graphics
 library(reshape2) #wide-to-long melting
@@ -43,12 +56,12 @@ library(Matching) #matching treatment, control groups
 library(loo) #leave one out crossvalidation
 ```
 
-
-analysis.R will then source functions.R, which contains functions for stan sampling, treatment effect estimation, and plot creation.
+analysis.R will then source functions.R, which contains functions for
+stan sampling, treatment effect estimation, and plot creation.
 
 Sampling begins with code chunk
 
-```r
+``` r
 food_sampled <- do_sampling(y=ihs_trans(kenya$food),
                             X=full_X, 
                             X_cntr = full_X_cntr,
@@ -58,6 +71,7 @@ food_sampled <- do_sampling(y=ihs_trans(kenya$food),
 
 Running this should result in 4 chains being distributed across 4 cores:
 
-![](Screen Shot 2020-06-05 at 2.53.01 PM.png)
+![](Screen%20Shot%202020-06-05%20at%202.53.01%20PM.png)
 
-The rest of the code will fit the models for the remaining responses and create graphics and tables present in the manuscript. 
+The rest of the code will fit the models for the remaining responses and
+create graphics and tables present in the manuscript.
