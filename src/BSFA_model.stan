@@ -50,6 +50,7 @@ transformed parameters{
   vector<lower=0>[N] lambda;
   vector[N] Data;                 // will contain observed and imputed quantities
   vector[N] log_lik;              // for calculation of LOO-based ELPD
+  vector[N] alphataubeta;
   
   //replace missing values (-99) with imputed/parameters
   Data = f;
@@ -64,9 +65,10 @@ transformed parameters{
   
   //data model
   for (i in 1:N){
+  alphataubeta[i] = alpha[hh[i]] +tau[loc[i]] + X[i]*beta;
   log_lik[i] = log_mix(rho,
-            normal_lpdf(Data[i] |  alpha[hh[i]] +tau[loc[i]] + X[i]*beta - u[i], sigma_v),
-            normal_lpdf(Data[i] |  alpha[hh[i]] +tau[loc[i]] + X[i]*beta,        sigma_v));
+            normal_lpdf(Data[i] |  alphataubeta[i] - u[i], sigma_v),
+            normal_lpdf(Data[i] |  alphataubeta[i],        sigma_v));
   } 
 }
 
@@ -75,13 +77,13 @@ model {
   
   alpha_raw ~ normal(0,1);
   tau_raw ~ normal(0,1);
-  mu_a ~ cauchy(0,5);
+  mu_a ~ normal(0,5);
   
-  sigma_a ~ cauchy(0,2.5);
-  sigma_v ~ cauchy(0,2.5);
-  sigma_l ~ cauchy(0,2.5);
+  sigma_a ~ normal(0,2.5);
+  sigma_v ~ normal(0,2.5);
+  sigma_l ~ normal(0,2.5);
   
-  beta ~ cauchy(0, 2.5);
+  beta ~ normal(0, 2.5);
   
   gamma1 ~ normal(0,1);
   gamma2 ~ normal(0,1);
@@ -108,10 +110,12 @@ generated quantities {
   real u_cntr[N];
   real f_pred[N];
   real f_pred_cntr[N];
+  real alphatau[N];
 
     for (i in 1:N){
-    c[i] =      alpha[hh[i]] + tau[loc[i]] + X[i]*beta; //factual potential
-    c_cntr[i] = alpha[hh[i]] + tau[loc[i]] + X_cntr[i]*beta; //counterfactual potential
+    alphatau[i] = alpha[hh[i]] + tau[loc[i]];
+    c[i] =      alphatau[i] + X[i]*beta; //factual potential
+    c_cntr[i] = alphatau[i] + X_cntr[i]*beta; //counterfactual potential
     u_cntr[i] = exponential_rng(1 ./ exp(gamma1 + X_cntr[i, 1:7]*gamma2)); //counterfactual deviation from potential
     f_pred[i] =      normal_rng(c[i]-      bernoulli_rng(rho)*u[i],      sigma_v); //factual functioning
     f_pred_cntr[i] = normal_rng(c_cntr[i]- bernoulli_rng(rho)*u_cntr[i], sigma_v); //counterfactual functioning
