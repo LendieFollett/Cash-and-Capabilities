@@ -379,24 +379,25 @@ diversity_sampled <- do_sampling(y=y_stand(kenya$diversity, kenya),
 saveRDS(diversity_sampled, file = paste(subfolder,"diversity_sampled.rds", sep = "/"))
 
 
-# illness ---------------------------
+# illness NOT CONVERGED---------------------------
 
 illness_sampled <- do_sampling(y=ihs_trans(kenya$illness1),
                               full_X, 
                               X_cntr = full_X_cntr,
                               hh_id=kenya$hhcode, loc_id=kenya$location,
+                              kappa = 1,
                               file = "src/selection_model2.stan")
 saveRDS(illness_sampled, file = paste(subfolder,"illness_sampled.rds", sep = "/"))
 
 
 # education - schooling ---------------------------
-
+#12/29: kappa = 10 did not converge, trying kappa = 1
 # no transformation
 schooling_sampled <- do_sampling(y=education_data$schooling,
                                  education_X, 
                                  X_cntr = education_X_cntr,
                                  hh_id=education_data$hhcode, 
-                                 loc_id=education_data$location, kappa = 10,
+                                 loc_id=education_data$location, kappa = 1,
                                  file = "src/selection_model2.stan")
 
 saveRDS(schooling_sampled, file = paste(subfolder,"schooling_sampled.rds", sep = "/"))
@@ -460,10 +461,8 @@ health_sampled_lm <- readRDS(paste(subfolder,'health_sampled_lm.rds', sep = "/")
 #-- DIAGNOSTICS ------------
 #trace plots
 stan_trace(diversity_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))#need to redo
-stan_trace(education1_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
-stan_trace(micro_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
+stan_trace(illness_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
 stan_trace(schooling_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__")) #need to redo 11/29
-stan_trace(food_sampled, par = c("phi","gamma1", "gamma2", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
 stan_trace(wasting_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]","sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__")) #one rogue chain - redo 11/29
 stan_trace(underweight_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]","beta[4]", "beta[7]", "sigma_a", "sigma_v",  "beta[24]", "beta[7]","rho", "lp__", "f_pred[1]", "f_pred[10]"))
 stan_trace(stunting_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
@@ -472,19 +471,18 @@ stan_trace(stunting_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "
 #Summarise R-hat values, effective sample sizes
 #sort by rhat, n_eff, see trouble spots
 #matched : original
-summary(diversity_sampled)$summary %>%View  #good - c0 = 1 : ok
-summary(food_sampled)$summary %>%View       #ok            : good
-summary(education1_sampled)$summary %>%View #good          : good
-summary(wasting_sampled)$summary %>%View      #good          : good
-summary(health_sampled)$summary %>%View     #good          : good
-summary(schooling_sampled)$summary %>%View  #ok c0 = 1     : ok
-summary(expenditure_sampled)$summary %>%View#good          : ok (trace good)
+summary(diversity_sampled)$summary %>%View  #good - c0 = 1 
+summary(schooling_sampled)$summary %>%View  #good        
+summary(wasting_sampled)$summary %>%View    #ok c0=1     
+summary(health_sampled)$summary %>%View     #good         
+summary(schooling_sampled)$summary %>%View  #ok c0 = 1  (should be good once 4 chains)
+summary(illness_sampled)$summary %>%View    #not converged         
 
 
 # Treatment effects ---------------------------
 #capability set plots
-plot_cs(sampled=schooling_sampled, y=ihs_trans(kenya$schooling),response =  "schooling",       data = education_data,X = education_X)
-ggsave(paste(subfolder,"schooling_CS.pdf", sep = "/" ))
+plot_cs(sampled=illness_sampled, y=ihs_trans(kenya$illness1),response =  "illness (1)",       data = kenya, backtrans=TRUE)
+ggsave(paste(subfolder,"illness_CS.pdf", sep = "/" ))
 
 plot_cs(sampled=underweight_sampled,y = (y_stand(nutrition_data$underweight,nutrition_data)), response = "underweight",data = nutrition_data, backtrans=FALSE)
 ggsave(paste(subfolder,"underweight_CS.pdf", sep = "/" ))
@@ -495,23 +493,24 @@ ggsave(paste(subfolder,"diversity_CS.pdf", sep = "/" ))
 plot_cs(sampled=schooling_sampled,       y=education_data$schooling,      response =  "schooling",       data = education_data)
 ggsave(paste(subfolder,"schooling_CS.pdf", sep = "/" ))
 
-plot_cs(sampled=wasting_sampled,       y=ihs_trans(nutrition_data$wasting),      response =  "wasting",       data = nutrition_data)
-ggsave(paste(subfolder,"health_CS.pdf", sep = "/" ))
+plot_cs(sampled=wasting_sampled,       y=nutrition_data$wasting,      response =  "wasting",       data = nutrition_data)
+ggsave(paste(subfolder,"wasting_CS.pdf", sep = "/" ))
 
 plot_cs(sampled=stunting_sampled,       y=nutrition_data$stunting,      response =  "stunting",       data = nutrition_data)
+ggsave(paste(subfolder,"stunting_CS.pdf", sep = "/" ))
 
 
 ###############################################
 
-trt <- rbind(   data.frame(derivatives(full_X, expenditure_sampled), y = "expenditure"),
-   data.frame(derivatives(full_X, food_sampled),    y = "food"),
-   data.frame(derivatives(full_X, micro_sampled),    y = "micronutrients"),
+trt <- rbind(   
    data.frame(derivatives(full_X, diversity_sampled),    y = "diversity"),
-   data.frame(derivatives(full_X, education1_sampled),    y = "education"),
-   data.frame(derivatives(full_X, health_sampled),    y = "health"),
+   data.frame(derivatives(nutrition_X, stunting_sampled),    y = "stunting"),
+   data.frame(derivatives(nutrition_X, wasting_sampled),    y = "wasting"),
+   data.frame(derivatives(nutrition_X, underweight_sampled),    y = "underweight"),
+   #data.frame(derivatives(full_X, illness_sampled),    y = "illness (1)"),
    data.frame(derivatives(education_X, schooling_sampled),    y = "schooling"))%>%
-  mutate(y = factor(y, levels = c("schooling", "health", "education", 
-                                  "diversity", "micronutrients", "food", "expenditure")))
+  mutate(y = factor(y, levels = c("diversity", "stunting", "wasting", 
+                                  "underweight", "schooling")))
 
 
 #summary stats - transformed scale
