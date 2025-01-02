@@ -41,7 +41,7 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,kappa,file){
   #replace y values with missing indicator
   #these values will be replaced in Stan with parameter values to be sampled
   #(so they will get a capability set too)
-  f[index_miss] <- -99
+  f[index_miss] <-imputed_f[index_miss] #-99
   todo = which(X[,"treated"] == 1 & X[,"year"] == 1)
   data.list <- list(N = length(f), 
                     N_subset = length(todo),
@@ -69,7 +69,7 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,kappa,file){
                 sigma_v = .5*mean(m1$residuals^2)^(.5), sigma_v2 = .5*mean(m1$residuals^2),
                 sigma_l = .5*mean(m1$residuals^2)^(.5), sigma_l2 =.5*mean(m1$residuals^2),
                 u =.5*(max(imputed_f)-imputed_f) + .01, #approx. 50 percent of distance from  max
-                rho = .9, 
+                rho = .6, 
                 f_imp = rep(mean(imputed_f), N_miss),
                 phi = phi_prior_mean)
   
@@ -86,7 +86,16 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,kappa,file){
                          init = inits,
                          control = list(adapt_delta = 0.9)) 
   return(sm_sampled)
-}
+}  #Sample with rstan
+  sm_sampled <- sampling(compiled_selection_model, 
+                         data = data.list, 
+                         chains = 2,
+                         iter =1000,
+                         warmup = 500,
+                         pars = par_keep,
+                         include=TRUE,
+                         init = inits,
+                         control = list(adapt_delta = 0.95)) 
 
 ##########plot_cs()-----------
 #sampled = stanfit object

@@ -75,18 +75,21 @@ model {
   
   alpha_raw ~ normal(0,1);
   tau_raw ~ normal(0,1);
-  mu_a ~ normal(0,5);
+  mu_a ~ normal(0,2.5);
   
-  sigma_a ~ normal(0,2.5);
-  sigma_v ~ normal(0,2.5);
-  sigma_l ~ normal(0,2.5);
+  sigma_v ~ inv_gamma(2, 0.5); 
+  sigma_l ~ inv_gamma(2, 0.5); 
+  sigma_a ~ inv_gamma(2, 0.5); 
+
+  //sigma_v ~ normal(0,1);
+  //sigma_l ~ normal(0,1);
   
   //tried horseshoe prior - shrinks most coefficients pretty rigorously - given our low dimension and goal of quantifying effects, this is probably not that useful
   // go back to standard ridge prior
   //issue: assumes independence among coefficients
   //this is a problem if we believe in heredity principals
   // e.g.)Hierarchical Shrinkage Priors for Regression Models by Griffin, Brown
-  beta ~ normal(0, 2.5);
+  beta ~ normal(0, 1);
  // sigma_beta ~ cauchy(0,1);
   //tau_beta ~ cauchy(0,1);
   

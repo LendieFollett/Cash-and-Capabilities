@@ -380,13 +380,13 @@ saveRDS(diversity_sampled, file = paste(subfolder,"diversity_sampled.rds", sep =
 
 
 # illness NOT CONVERGED---------------------------
-
-illness_sampled <- do_sampling(y=ihs_trans(kenya$illness1),
+#trying the y_stand transformation 12/31
+illness_sampled <- do_sampling(y=y_stand(kenya$illness1, kenya),
                               full_X, 
                               X_cntr = full_X_cntr,
                               hh_id=kenya$hhcode, loc_id=kenya$location,
                               kappa = 1,
-                              file = "src/selection_model2.stan")
+                              file = "src/selection_model2_illness.stan")
 saveRDS(illness_sampled, file = paste(subfolder,"illness_sampled.rds", sep = "/"))
 
 
@@ -524,7 +524,7 @@ write.csv("trt_effect_summary.csv", row.names = FALSE)
 
 #on original scale - trt effect on potentials
 trt %>%
-subset(y %in% c("health", "education", "micronutrients", "food", "expenditure") &
+subset(y %in% c("stunting", "wasting", "underweight") &
          type %in% c("Potential"))%>%
   mutate(exp_effect = exp(effect)) %>%
   group_by(y, by, type) %>%
@@ -537,9 +537,9 @@ subset(y %in% c("health", "education", "micronutrients", "food", "expenditure") 
 
 #Overall plot
 
-subset(trt, by == "Overall") %>%
+filter(trt, by == "Overall") %>%
   group_by(type, y, by)%>%
-  summarise(post_mean = mean(effect),
+  dplyr::summarise(post_mean = mean(effect),
             lower = quantile(effect, .025),
             upper = quantile(effect, .975)) %>%
   ggplot()+
@@ -552,24 +552,13 @@ subset(trt, by == "Overall") %>%
   labs(x = "", y = "Treatment Effect")+guides(color = guide_legend(reverse = TRUE))
 ggsave(paste(subfolder, "trt_effects.pdf", sep = "/"), width = 8, height =7, units = "in" )
 
-#gets better when remove inefficiency
-ggplot(data = subset(trt,  by == "Overall"))+ 
-  geom_violin(aes(x = y, y = effect, fill = type),draw_quantiles = .5) +
-  theme_bw() + 
-  geom_hline(aes(yintercept = 0)) + coord_flip()+
-  theme(axis.text.x = element_text(angle = 45)) +
-  scale_fill_grey() +
-  labs(x = "", y = "Treatment Effect")
-
-
-
 
 
 #By gender
 
-subset(trt, by != "Overall") %>%
+filter(trt, by != "Overall") %>%
   group_by(type, y, by)%>%
-  summarise(post_mean = mean(effect),
+  dplyr::summarise(post_mean = mean(effect),
             lower = quantile(effect, .025),
             upper = quantile(effect, .975)) %>%
   ggplot()+
