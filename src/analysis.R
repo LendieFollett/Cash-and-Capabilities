@@ -17,7 +17,7 @@ rstan_options(auto_write = TRUE)
 options(warn=-1)
 # data prep ---------------------------
 
-kenya <- read.csv("raw_data/ctovc_final2023.csv")
+kenya <- read.csv("raw_data/ctovc_final.csv")
 
 # exploratory ---------------------------
 
@@ -315,6 +315,7 @@ full_X <- kenya%>%
   dplyr::select(-c(hhcode, location, 
                     expenditure, food, micro, education1, education2, health, diversity, 
                     stunting, wasting, underweight, schooling,enrolled, illness1, illness2,
+                   cal_pd,cal_micro ,cal_cereal,cal_rt,cal_pl,cal_anim,cal_fv,cal_oil,cal_sugar,cal_misc,
                     sample_nutrition, sample_education, initial_exp,
                     large,             small,            poultry,           animals ))  %>% #remove from X matrix
   dplyr::select(c(treated,head_sex,year, treated_year, treated_sex, year_sex, treated_year_sex), everything()) %>% #reorder
@@ -334,6 +335,7 @@ full_X_cntr <- kenya%>%
   dplyr::select(-c(hhcode, location, 
                    expenditure, food, micro, education1, education2, health, diversity, 
                    stunting, wasting, underweight, schooling,enrolled, illness1, illness2,
+                   cal_pd,cal_micro ,cal_cereal,cal_rt,cal_pl,cal_anim,cal_fv,cal_oil,cal_sugar,cal_misc,
                    sample_nutrition, sample_education, initial_exp,
                    large,             small,            poultry,           animals ))  %>% #remove from X matrix
   dplyr::select(c(treated,head_sex,year, treated_year, treated_sex, year_sex, treated_year_sex), everything()) %>% #reorder
@@ -371,6 +373,7 @@ nutrition_data <- kenya[kenya$sample_nutrition == 1,]
 #talk about impact in terms of standard deviation from control
 #nov 14: diversity needs c0 = 1 in order to achieve good sampling performance
 #comparing c0=1 to c0=10, the treatment effects appear similar
+#feb 24 - lowest neff is 101
 diversity_sampled <- do_sampling(y=y_stand(kenya$diversity, kenya),
                                  X=full_X, 
                                  X_cntr = full_X_cntr,
@@ -379,35 +382,23 @@ diversity_sampled <- do_sampling(y=y_stand(kenya$diversity, kenya),
 saveRDS(diversity_sampled, file = paste(subfolder,"diversity_sampled.rds", sep = "/"))
 
 
-# illness NOT CONVERGED---------------------------
-#trying the y_stand transformation 12/31
-illness_sampled <- do_sampling(y=y_stand(kenya$illness1, kenya),
-                              full_X, 
-                              X_cntr = full_X_cntr,
-                              hh_id=kenya$hhcode, loc_id=kenya$location,
-                              kappa = 1,
-                              file = "src/selection_model2_illness.stan")
-saveRDS(illness_sampled, file = paste(subfolder,"illness_sampled.rds", sep = "/"))
+# expenditure - micro ---------------------------
+micro_sampled <- do_sampling(y=ihs_trans(kenya$micro),
+                                X=full_X, 
+                                X_cntr = full_X_cntr,
+                                hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
+                                file = "src/selection_model2.stan" )
+saveRDS(micro_sampled, file =paste(subfolder, "micro_sampled.rds", sep = "/"))
 
-
-# education - schooling ---------------------------
-#12/29: kappa = 10 did not converge, trying kappa = 1
-# no transformation
-schooling_sampled <- do_sampling(y=education_data$schooling,
-                                 education_X, 
-                                 X_cntr = education_X_cntr,
-                                 hh_id=education_data$hhcode, 
-                                 loc_id=education_data$location, kappa = 1,
-                                 file = "src/selection_model2.stan")
-
-saveRDS(schooling_sampled, file = paste(subfolder,"schooling_sampled.rds", sep = "/"))
 
 
 # nutrition - stunting ---------------------------
+#2/20/25 stuntint had 2 parameters w neff < 100 at katppa = 10
+#rerunning with kappa = 1
 stunting_sampled <- do_sampling(y=nutrition_data$stunting,
                                 X=nutrition_X, 
                                 X_cntr = nutrition_X_cntr,
-                                hh_id=nutrition_data$hhcode, loc_id=nutrition_data$location, kappa = 10,
+                                hh_id=nutrition_data$hhcode, loc_id=nutrition_data$location, kappa = 1,
                                 file = "src/selection_model2.stan" )
 saveRDS(stunting_sampled, file =paste(subfolder, "stunting_sampled.rds", sep = "/"))
 
@@ -423,9 +414,42 @@ saveRDS(wasting_sampled, file =paste(subfolder, "wasting_sampled.rds", sep = "/"
 underweight_sampled <- do_sampling(y=nutrition_data$underweight,
                                X=nutrition_X, 
                                X_cntr = nutrition_X_cntr,
-                               hh_id=nutrition_data$hhcode, loc_id=nutrition_data$location, kappa = 10,
+                               hh_id=nutrition_data$hhcode, loc_id=nutrition_data$location, kappa = 1,
                                file = "src/selection_model2.stan" )
 saveRDS(underweight_sampled, file =paste(subfolder, "underweight_sampled.rds", sep = "/"))
+
+
+# nutrition - calories per day  ---------------------------
+lower_bound <- quantile(kenya$cal_pd, 0.01, na.rm = TRUE)
+upper_bound <- quantile(kenya$cal_pd, 0.99, na.rm = TRUE)
+
+# Windsorize the variable
+kenya$cal_pd_windsor <- pmin(pmax(kenya$cal_pd, lower_bound), upper_bound)
+hist(kenya$cal_pd_windsor)
+hist(ihs_trans(kenya$cal_pd_windsor))
+
+cal_pd_sampled <- do_sampling(y=ihs_trans(kenya$cal_pd_windsor),
+                                   X=full_X, 
+                                   X_cntr = full_X_cntr,
+                                   hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 1,
+                                   file = "src/selection_model2.stan" )
+saveRDS(cal_pd_sampled, file =paste(subfolder, "cal_pd_sampled.rds", sep = "/"))
+
+
+# nutrition - calories from micro PER PERSON ---------------------------
+lower_bound <- quantile(kenya$cal_micro/kenya$hhsize, 0.01, na.rm = TRUE)
+upper_bound <- quantile(kenya$cal_micro/kenya$hhsize, 0.99, na.rm = TRUE)
+
+# Windsorize the variable
+kenya$cal_micro_windsor <- pmin(pmax(kenya$cal_micro/kenya$hhsize, lower_bound), upper_bound)
+
+cal_pd_sampled <- do_sampling(y=ihs_trans(kenya$cal_micro_windsor),
+                              X=full_X, 
+                              X_cntr = full_X_cntr,
+                              hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 1,
+                              file = "src/selection_model2.stan" )
+saveRDS(underweight_sampled, file =paste(subfolder, "underweight_sampled.rds", sep = "/"))
+
 
 
 # read RDS files ---------------------
@@ -461,7 +485,7 @@ health_sampled_lm <- readRDS(paste(subfolder,'health_sampled_lm.rds', sep = "/")
 #-- DIAGNOSTICS ------------
 #trace plots
 stan_trace(diversity_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))#need to redo
-stan_trace(illness_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
+stan_trace(illness_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__", "mu_a"))
 stan_trace(schooling_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__")) #need to redo 11/29
 stan_trace(wasting_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]","sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__")) #one rogue chain - redo 11/29
 stan_trace(underweight_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]","beta[4]", "beta[7]", "sigma_a", "sigma_v",  "beta[24]", "beta[7]","rho", "lp__", "f_pred[1]", "f_pred[10]"))
@@ -471,18 +495,16 @@ stan_trace(stunting_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "
 #Summarise R-hat values, effective sample sizes
 #sort by rhat, n_eff, see trouble spots
 #matched : original
-summary(diversity_sampled)$summary %>%View  #good - c0 = 1 
-summary(schooling_sampled)$summary %>%View  #good        
-summary(wasting_sampled)$summary %>%View    #ok c0=1     
-summary(health_sampled)$summary %>%View     #good         
-summary(schooling_sampled)$summary %>%View  #ok c0 = 1  (should be good once 4 chains)
-summary(illness_sampled)$summary %>%View    #not converged         
-
+summary(diversity_sampled)$summary %>%View  #original:good 02/24/25 matched: good 2/24/25
+summary(stunting_sampled)$summary %>%View   #original:ok   02/21/25 matched:  good      
+summary(wasting_sampled)$summary %>%View    #original:good 02/21/25   matched: good
+summary(underweight_sampled)$summary %>%View#original:good   2/20/25  matched: good
+summary(micro_sampled)$summary %>%View      #original:good  02/20/25 matched: good 
 
 # Treatment effects ---------------------------
 #capability set plots
-plot_cs(sampled=illness_sampled, y=ihs_trans(kenya$illness1),response =  "illness (1)",       data = kenya, backtrans=TRUE)
-ggsave(paste(subfolder,"illness_CS.pdf", sep = "/" ))
+plot_cs(sampled=micro_sampled, y=ihs_trans(kenya$micro),response =  "illness (1)",       data = kenya, backtrans=TRUE)
+ggsave(paste(subfolder,"micro_CS.pdf", sep = "/" ))
 
 plot_cs(sampled=underweight_sampled,y = (y_stand(nutrition_data$underweight,nutrition_data)), response = "underweight",data = nutrition_data, backtrans=FALSE)
 ggsave(paste(subfolder,"underweight_CS.pdf", sep = "/" ))
@@ -508,9 +530,9 @@ trt <- rbind(
    data.frame(derivatives(nutrition_X, wasting_sampled),    y = "wasting"),
    data.frame(derivatives(nutrition_X, underweight_sampled),    y = "underweight"),
    #data.frame(derivatives(full_X, illness_sampled),    y = "illness (1)"),
-   data.frame(derivatives(education_X, schooling_sampled),    y = "schooling"))%>%
-  mutate(y = factor(y, levels = c("diversity", "stunting", "wasting", 
-                                  "underweight", "schooling")))
+   data.frame(derivatives(full_X, micro_sampled),    y = "micro")
+   )%>%
+  mutate(y = factor(y, levels = c("diversity", "micro", "stunting", "wasting", "underweight")))
 
 
 #summary stats - transformed scale
@@ -571,14 +593,4 @@ filter(trt, by != "Overall") %>%
   labs(x = "", y = "Treatment Effect")
 ggsave(paste(subfolder, "trt_effects_gender.pdf", sep = "/"), width = 9, height =7, units = "in" )
 
-
-
-ggplot(data = subset(trt, type == "Inefficiency"))+ 
-  geom_violin(aes(x = y, y = effect, fill = type),draw_quantiles = .5) +
-  facet_grid(.~by, scales = "free") + 
-  theme_bw() + 
-  geom_hline(aes(yintercept = 0)) + coord_flip()+
-  theme(axis.text.x = element_text(angle = 45)) +
-  scale_fill_grey()+
-  labs(x = "", y = "Treatment Effect")
 

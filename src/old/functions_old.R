@@ -78,24 +78,24 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,kappa,file){
   #Sample with rstan
   sm_sampled <- sampling(compiled_selection_model, 
                          data = data.list, 
-                         chains = 2,
-                         iter =10000,
+                         chains = 4,
+                         iter =15000,
                          warmup = 5000,
                          pars = par_keep,
                          include=TRUE,
                          init = inits,
-                         control = list(adapt_delta = 0.9)) 
+                         control = list(adapt_delta = 0.95)) 
   return(sm_sampled)
 }  #Sample with rstan
-  sm_sampled <- sampling(compiled_selection_model, 
-                         data = data.list, 
-                         chains = 2,
-                         iter =1000,
-                         warmup = 500,
-                         pars = par_keep,
-                         include=TRUE,
-                         init = inits,
-                         control = list(adapt_delta = 0.95)) 
+  #sm_sampled <- sampling(compiled_selection_model, 
+  ##                       data = data.list, 
+  #                       chains = 2,
+  #                       iter =1000,
+  #                       warmup = 500,
+  #                       pars = par_keep,
+  #                       include=TRUE,
+  #                       init = inits,
+  #                       control = list(adapt_delta = 0.95)) 
 
 ##########plot_cs()-----------
 #sampled = stanfit object
