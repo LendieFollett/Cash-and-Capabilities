@@ -123,13 +123,13 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
   
   data.frame(f =y[todo],
              missing = is.na(y[todo]),
-             sex = factor(d$head_sex, levels = c(0,1), labels = c("Male", "Female")),
+             age = factor(d$head_age, levels = c(0,1), labels = c("Younger", "Older")),
              lb_trt =   apply(f_pred_trt , 2, "quantile", c(0.05)),
              ub_trt =   apply(f_pred_trt , 2, "quantile", c(0.95)),
              lb_notrt = apply(f_pred_cntr, 2, "quantile", c(0.05)),
              ub_notrt = apply(f_pred_cntr, 2, "quantile", c(0.95))) %>%
-    arrange(sex, ub_notrt)%>%
-    mutate(id = c(1:sum(d$head_sex == 0), 1:sum(d$head_sex == 1))) %>%
+    arrange(age, ub_notrt)%>%
+    mutate(id = c(1:sum(d$head_age == 0), 1:sum(d$head_age == 1))) %>%
     subset(missing == FALSE)%>%
     ggplot() +
     geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt), colour = "grey50") +
@@ -137,9 +137,9 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
     geom_line(aes(x=id, y=ub_notrt )) +
     labs(x = "Household ID", y = response)+
     geom_point(aes(x = id, y =f),size = .5,alpha = I(.3), colour  ="black")+
-    facet_wrap(.~sex, scales = "free_x")+
+    facet_wrap(.~age, scales = "free_x")+
     theme(plot.title = element_text(hjust = 0.5)) +
-    scale_colour_grey() #+scale_y_continuous(limits = c(-4, 4))
+    scale_colour_grey() + scale_y_continuous(labels = label_comma())
   
 }
 
@@ -148,13 +148,12 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
 
 plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
   
+  #draws from posterior predictive (CS)
   f_pred_trt <-  rstan::extract(sampled, "f_pred")%>%
     data.frame() 
-  f_pred_trt <- f_pred_trt[,data$year == 1 & data$treated == 1]
+  #draws from counterfactual posterior predictive (CS)
   f_pred_cntr <-  rstan::extract(sampled, "f_pred_cntr")%>%
     data.frame()
-  f_pred_cntr <- f_pred_cntr[,data$year == 1 & data$treated == 1]
-  
   if (backtrans == TRUE) {
     f_pred_trt <- exp(f_pred_trt)
     f_pred_cntr<- exp(f_pred_cntr)
@@ -162,19 +161,18 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
   }
   
   
+  todo = which(data[,"treated"] == 1 & data[,"year"] == 1)
+  d <-  data[todo,]
   
-  d <-  data %>%
-    subset(year == 1 & treated == 1) 
-  
-  data.frame(f =y[data$year == 1 & data$treated == 1],
-             missing = is.na(y[data$year == 1 & data$treated == 1]),
-             sex = factor(d$head_sex, levels = c(0,1), labels = c("Male", "Female")),
+  data.frame(f =y[todo],
+             missing = is.na(y[todo]),
+             sex = factor(d$head_age, levels = c(0,1), labels = c("Younger", "Older")),
              lb_trt =   apply(f_pred_trt , 2, "quantile", c(0.05)),
              ub_trt =   apply(f_pred_trt , 2, "quantile", c(0.95)),
              lb_notrt = apply(f_pred_cntr, 2, "quantile", c(0.05)),
              ub_notrt = apply(f_pred_cntr, 2, "quantile", c(0.95))) %>%
     arrange( ub_notrt)%>%
-    mutate(id = c(1:length(d$head_sex))) %>%
+    mutate(id = c(1:length(d$head_age))) %>%
     subset(missing == FALSE)%>%
     ggplot() +
     geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt), colour = "grey50") +
@@ -182,9 +180,9 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
     geom_line(aes(x=id, y=ub_notrt )) +
     labs(x = "Household ID", y = response)+
     geom_point(aes(x = id, y =f),size = .5,alpha = I(.3), colour  ="black")+
-    theme(plot.title = element_text(hjust = 0.5)) +
-    scale_colour_grey() #+scale_y_continuous(limits = c(-4, 4))
+    scale_colour_grey() + scale_y_continuous(labels = label_comma())
   
+
 }
 
 #########derivatives() : posterior draws from quantities in Eq (18)-------
@@ -193,23 +191,23 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
 
 derivatives <- function(full_X, samples){ 
   full_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
-  full_X_mean[c("treated", "head_sex", "year", 
-                "treated_year", "treated_sex", "year_sex", 
-                "treated_year_sex")] <- c(1, full_X_mean["head_sex"], 1,
-                                          1*1, 1*full_X_mean["head_sex"],full_X_mean["head_sex"]*1,
-                                          full_X_mean["head_sex"]*1*1)
+  full_X_mean[c("treated", "head_age", "year", 
+                "treated_year", "treated_age", "year_age", 
+                "treated_year_age")] <- c(1, full_X_mean["head_age"], 1,
+                                          1*1, 1*full_X_mean["head_age"],full_X_mean["head_age"]*1,
+                                          full_X_mean["head_age"]*1*1)
   
-  female_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
-  female_X_mean[c("treated", "head_sex", "year", 
-                  "treated_year", "treated_sex", "year_sex", 
-                  "treated_year_sex")] <- c(1, 1, 1,
+  older_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
+  older_X_mean[c("treated", "head_age", "year", 
+                 "treated_year", "treated_age", "year_age", 
+                 "treated_year_age")] <- c(1, 1, 1,
                                             1*1, 1*1,1*1,
                                             1*1*1)
   
-  male_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
-  male_X_mean[c("treated", "head_sex", "year", 
-                "treated_year", "treated_sex", "year_sex", 
-                "treated_year_sex")] <- c(1, 0, 1,
+  younger_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
+  younger_X_mean[c("treated", "head_age", "year", 
+                   "treated_year", "treated_age", "year_age", 
+                   "treated_year_age")] <- c(1, 0, 1,
                                           1*1, 1*0,0*1,
                                           0*1*1)
   
@@ -225,14 +223,14 @@ derivatives <- function(full_X, samples){
   dudb <- temp1*(temp2-1)*rho_samps
 
   #female effect
-  temp1 <- apply(gamma_samps, 1, function(x){exp(x%*%female_X_mean)}) #exp(X*gamma) = lambda(1)
-  temp2 <- exp(-apply(gamma_samps[,c(5,8)], 1, function(x){x%*%female_X_mean[c(5,8)]})) # 1/exp(g2 + g3*1)
-  dudb_female <- temp1*(temp2-1)*rho_samps
+  temp1 <- apply(gamma_samps, 1, function(x){exp(x%*%older_X_mean)}) #exp(X*gamma) = lambda(1)
+  temp2 <- exp(-apply(gamma_samps[,c(5,8)], 1, function(x){x%*%older_X_mean[c(5,8)]})) # 1/exp(g2 + g3*1)
+  dudb_older <- temp1*(temp2-1)*rho_samps
   
   #male effect
-  temp1 <- apply(gamma_samps, 1, function(x){exp(x%*%male_X_mean)}) #exp(X*gamma) = lambda(1)
-  temp2 <- exp(-apply(gamma_samps[,c(5,8)], 1, function(x){x%*%male_X_mean[c(5,8)]})) # 1/exp(g2 + g3*0)
-  dudb_male <- temp1*(temp2-1)*rho_samps
+  temp1 <- apply(gamma_samps, 1, function(x){exp(x%*%younger_X_mean)}) #exp(X*gamma) = lambda(1)
+  temp2 <- exp(-apply(gamma_samps[,c(5,8)], 1, function(x){x%*%younger_X_mean[c(5,8)]})) # 1/exp(g2 + g3*0)
+  dudb_younger <- temp1*(temp2-1)*rho_samps
 
   rm(gamma_samps)
   rm(rho_samps)
@@ -240,30 +238,30 @@ derivatives <- function(full_X, samples){
   #CAPABILITIES effect
   beta_samps <- do.call("cbind", rstan::extract(samples, par = c("beta")))
   #overall effect
-  dcdb <- beta_samps[,4] + beta_samps[,7]*full_X_mean["head_sex"]
-  #female effect
-  dcdb_female <- beta_samps[,4] + beta_samps[,7]*1
-  #male effect
-  dcdb_male <- beta_samps[,4] + beta_samps[,7]*0
+  dcdb <- beta_samps[,4] + beta_samps[,7]*full_X_mean["head_age"]
+  #older effect
+  dcdb_older <- beta_samps[,4] + beta_samps[,7]*1
+  #younger effect
+  dcdb_younger <- beta_samps[,4] + beta_samps[,7]*0
   rm(beta_samps)
   
   #FUNCTIONING effect 
   dydb <-        dcdb        + dudb
-  dydb_female <- dcdb_female + dudb_female
-  dydb_male <-   dcdb_male   + dudb_male
+  dydb_older <- dcdb_older + dudb_older
+  dydb_younger <-   dcdb_younger   + dudb_younger
   
   
   all <- rbind(data.frame(effect = dydb, type = "Functioning", by = "Overall"), 
-               data.frame(effect = dydb_female, type = "Functioning", by = "Female"), 
-               data.frame(effect = dydb_male, type = "Functioning", by = "Male"), 
+               data.frame(effect = dydb_older, type = "Functioning", by = "Older"), 
+               data.frame(effect = dydb_younger, type = "Functioning", by = "Younger"), 
                
                data.frame(effect = dudb, type = "Choice", by = "Overall"), 
-               data.frame(effect = dudb_female, type = "Choice", by = "Female"), 
-               data.frame(effect = dudb_male, type = "Choice", by = "Male"), 
+               data.frame(effect = dudb_older, type = "Choice", by = "Older"), 
+               data.frame(effect = dudb_younger, type = "Choice", by = "Younger"), 
                
                data.frame(effect = dcdb, type = "Capabilities", by = "Overall"), 
-               data.frame(effect = dcdb_female, type = "Capabilities", by = "Female"), 
-               data.frame(effect = dcdb_male, type = "Capabilities", by = "Male"))
+               data.frame(effect = dcdb_older, type = "Capabilities", by = "Older"), 
+               data.frame(effect = dcdb_younger, type = "Capabilities", by = "Younger"))
   return(all)
 }
 
