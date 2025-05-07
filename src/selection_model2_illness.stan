@@ -77,9 +77,9 @@ model {
   tau_raw ~ normal(0,1);
   mu_a ~ normal(0,2.5);
   
-  sigma_v ~ inv_gamma(2, 0.5); 
-  sigma_l ~ inv_gamma(2, 0.5); 
-  sigma_a ~ inv_gamma(2, 0.5); 
+  sigma_v ~ inv_gamma(20, .1); 
+  sigma_l ~ inv_gamma(20, .1); 
+  sigma_a ~ inv_gamma(20, .1); 
 
   //sigma_v ~ normal(0,1);
   //sigma_l ~ normal(0,1);
@@ -95,7 +95,7 @@ model {
   
   gamma1 ~ normal(0,1);
   gamma2 ~ normal(0,1);
-  rho ~ beta(2,2);
+  rho ~ beta(2,4);
   //EMPIRICAL BAYES based prior
   phi ~ multi_normal(phi_prior_mean,kappa*phi_prior_var);
       u ~ exponential(1 ./ lambda);
