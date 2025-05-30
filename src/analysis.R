@@ -18,7 +18,9 @@ rstan_options(auto_write = TRUE)
 options(warn=-1)
 # data prep ---------------------------
 
-kenya <- read.csv("raw_data/ctovc_final.csv")
+kenya <- read.csv("raw_data/ctovc_final_cg.csv")
+
+kenya_old <- read.csv("raw_data/ctovc_final.csv")
 
 # exploratory ---------------------------
 
@@ -294,7 +296,9 @@ rbind(mutate(matched_lr, method = "lr"),
 
 # X matrix ---------------------------
 
-kenya$head_age <- ifelse(kenya$head_age >=55, 1, 0) #1 if older
+median_age <- median(filter(kenya, sample_nutrition == 1)$caregiver)
+
+kenya$caregiver <- ifelse(kenya$caregiver >=median_age, 1, 0) #1 if older
 #based on matching or not, what hh codes are we using?
 usehh <-unique(kenya$hhcode) #if using whole data set
 #usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
@@ -311,18 +315,18 @@ full_X <- kenya%>%
               "adult_educ", "rooms"),
             gel_stand)%>% #use gelman standardization on continuous/numeric X columns
   mutate(treated_year = treated*year,#interactions
-         treated_age = treated*head_age,
-         year_age = year*head_age,
-         treated_year_age = treated*year*head_age)%>% 
-  dplyr::select(-c(hhcode, location, 
+         treated_age = treated*caregiver,
+         year_age = year*caregiver,
+         treated_year_age = treated*year*caregiver)%>% 
+  dplyr::select(-c(hhcode, location, head_age,
                     expenditure, food, micro, education1, education2, health, diversity, 
                     stunting, wasting, underweight, schooling,enrolled, illness1, illness2,
                    cal_pd,cal_micro ,cal_cereal,cal_rt,cal_pl,cal_anim,cal_fv,cal_oil,cal_sugar,cal_misc,
                     sample_nutrition, sample_education, initial_exp,
                     large,             small,            poultry,           animals, elderly ))  %>% #remove from X matrix
-  dplyr::select(c(treated,head_age,year, treated_year, treated_age, year_age, treated_year_age), everything()) %>% #reorder
+  dplyr::select(c(treated,caregiver,year, treated_year, treated_age, year_age, treated_year_age), everything()) %>% #reorder
   as.matrix()
-
+#head_age
 full_X_cntr <- kenya%>%
   mutate(land = ihs_trans(land),
          initial_exp = ihs_trans(initial_exp))%>%
@@ -331,16 +335,16 @@ full_X_cntr <- kenya%>%
               "adult_educ", "rooms"),
             gel_stand)%>% #use gelman standardization on continuous/numeric X columns
   mutate(treated_year = 0,#treated*year,#interactions
-         treated_age = treated*head_age,
-         year_age = year*head_age,
+         treated_age = treated*caregiver,
+         year_age = year*caregiver,
          treated_year_age = 0)%>%#treated*year*head_sex)%>% 
-  dplyr::select(-c(hhcode, location, 
+  dplyr::select(-c(hhcode, location, head_age,
                    expenditure, food, micro, education1, education2, health, diversity, 
                    stunting, wasting, underweight, schooling,enrolled, illness1, illness2,
                    cal_pd,cal_micro ,cal_cereal,cal_rt,cal_pl,cal_anim,cal_fv,cal_oil,cal_sugar,cal_misc,
                    sample_nutrition, sample_education, initial_exp,
                    large,             small,            poultry,           animals, elderly ))  %>% #remove from X matrix
-  dplyr::select(c(treated,head_age,year, treated_year, treated_age, year_age, treated_year_age), everything()) %>% #reorder
+  dplyr::select(c(treated,caregiver,year, treated_year, treated_age, year_age, treated_year_age), everything()) %>% #reorder
   as.matrix()
 
 #RUN STAN MODELS
@@ -425,7 +429,7 @@ saveRDS(cal_pd_sampled, file =paste(subfolder, "cal_pd_sampled.rds", sep = "/"))
 
 
 # nutrition - calories from micro ---------------------------
-lower_bound <- quantile(kenya$cal_micro, 0.01, na.rm = TRUE)# it's zero...
+lower_bound <- quantile(kenya$cal_micro, 0.01, na.rm = TRUE) # it's zero...
 upper_bound <- quantile(kenya$cal_micro, 0.99, na.rm = TRUE)
 
 # Windsorize the variable
@@ -489,7 +493,7 @@ cal_pd_sampled <- readRDS(paste(subfolder,'cal_pd_sampled.rds', sep = "/"))
 stan_trace(diversity_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))#need to redo
 stan_trace(wasting_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]","sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__")) #one rogue chain - redo 11/29
 stan_trace(underweight_sampled, par = c("phi","gamma1","gamma2[4]", "gamma2[7]","beta[4]", "beta[7]", "sigma_a", "sigma_v",  "beta[24]", "beta[7]","rho", "lp__", "f_pred[1]", "f_pred[10]"))
-stan_trace(stunting_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
+stan_trace(cal_fv_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "sigma_a", "sigma_v",  "beta[4]", "beta[7]","rho", "lp__"))
 
 
 #Summarise R-hat values, effective sample sizes

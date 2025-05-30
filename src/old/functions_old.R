@@ -123,13 +123,13 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
   
   data.frame(f =y[todo],
              missing = is.na(y[todo]),
-             age = factor(d$head_age, levels = c(0,1), labels = c("Younger", "Older")),
+             age = factor(d$caregiver, levels = c(0,1), labels = c("Younger", "Older")),
              lb_trt =   apply(f_pred_trt , 2, "quantile", c(0.05)),
              ub_trt =   apply(f_pred_trt , 2, "quantile", c(0.95)),
              lb_notrt = apply(f_pred_cntr, 2, "quantile", c(0.05)),
              ub_notrt = apply(f_pred_cntr, 2, "quantile", c(0.95))) %>%
     arrange(age, ub_notrt)%>%
-    mutate(id = c(1:sum(d$head_age == 0), 1:sum(d$head_age == 1))) %>%
+    mutate(id = c(1:sum(d$caregiver == 0), 1:sum(d$caregiver == 1))) %>%
     subset(missing == FALSE)%>%
     ggplot() +
     geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt), colour = "grey50") +
@@ -142,6 +142,7 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
     scale_colour_grey() + scale_y_continuous(labels = label_comma())
   
 }
+
 
 #########plot_cs_agg()-------
 #same arguments as plot_cs()
@@ -185,27 +186,66 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
 
 }
 
+plot_cs_agg_numeric <- function(sampled, y, response, data,  backtrans = FALSE){
+  
+  #draws from posterior predictive (CS)
+  f_pred_trt <-  rstan::extract(sampled, "f_pred")%>%
+    data.frame() 
+  #draws from counterfactual posterior predictive (CS)
+  f_pred_cntr <-  rstan::extract(sampled, "f_pred_cntr")%>%
+    data.frame()
+  if (backtrans == TRUE) {
+    f_pred_trt <- exp(f_pred_trt)
+    f_pred_cntr<- exp(f_pred_cntr)
+    y <- exp(y)
+  }
+  
+  
+  todo = which(data[,"treated"] == 1 & data[,"year"] == 1)
+  d <-  data[todo,]
+  
+  data.frame(f =y[todo],
+             missing = is.na(y[todo]),
+             head_age = d$head_age,
+             lb_trt =   apply(f_pred_trt , 2, "quantile", c(0.05)),
+             ub_trt =   apply(f_pred_trt , 2, "quantile", c(0.95)),
+             lb_notrt = apply(f_pred_cntr, 2, "quantile", c(0.05)),
+             ub_notrt = apply(f_pred_cntr, 2, "quantile", c(0.95))) %>%
+    arrange( ub_notrt)%>% #changed from ub_notrt
+    mutate(id = c(1:length(d$head_age))) %>%
+    subset(missing == FALSE)%>%
+    ggplot() +
+    geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt, colour = ub_notrt)) +
+    geom_line(aes(x=id, y=lb_notrt  )) +
+    geom_line(aes(x=id, y=ub_notrt )) +
+    labs(x = "Household ID", y = response)+
+    geom_point(aes(x = id, y =f),size = .5,alpha = I(.3), colour  ="black")+
+    scale_colour_grey() + scale_y_continuous(labels = label_comma())
+  
+  
+}
+
 #########derivatives() : posterior draws from quantities in Eq (18)-------
 #full_X: X matrix
 #samples = stanfit object
 
 derivatives <- function(full_X, samples){ 
   full_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
-  full_X_mean[c("treated", "head_age", "year", 
+  full_X_mean[c("treated", "caregiver", "year", 
                 "treated_year", "treated_age", "year_age", 
-                "treated_year_age")] <- c(1, full_X_mean["head_age"], 1,
-                                          1*1, 1*full_X_mean["head_age"],full_X_mean["head_age"]*1,
-                                          full_X_mean["head_age"]*1*1)
+                "treated_year_age")] <- c(1, full_X_mean["caregiver"], 1,
+                                          1*1, 1*full_X_mean["caregiver"],full_X_mean["caregiver"]*1,
+                                          full_X_mean["caregiver"]*1*1)
   
   older_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
-  older_X_mean[c("treated", "head_age", "year", 
+  older_X_mean[c("treated", "caregiver", "year", 
                  "treated_year", "treated_age", "year_age", 
                  "treated_year_age")] <- c(1, 1, 1,
                                             1*1, 1*1,1*1,
                                             1*1*1)
   
   younger_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
-  younger_X_mean[c("treated", "head_age", "year", 
+  younger_X_mean[c("treated", "caregiver", "year", 
                    "treated_year", "treated_age", "year_age", 
                    "treated_year_age")] <- c(1, 0, 1,
                                           1*1, 1*0,0*1,
@@ -238,7 +278,7 @@ derivatives <- function(full_X, samples){
   #CAPABILITIES effect
   beta_samps <- do.call("cbind", rstan::extract(samples, par = c("beta")))
   #overall effect
-  dcdb <- beta_samps[,4] + beta_samps[,7]*full_X_mean["head_age"]
+  dcdb <- beta_samps[,4] + beta_samps[,7]*full_X_mean["caregiver"]
   #older effect
   dcdb_older <- beta_samps[,4] + beta_samps[,7]*1
   #younger effect
@@ -263,6 +303,61 @@ derivatives <- function(full_X, samples){
                data.frame(effect = dcdb_older, type = "Capabilities", by = "Older"), 
                data.frame(effect = dcdb_younger, type = "Capabilities", by = "Younger"))
   return(all)
+}
+
+
+
+derivatives_numeric <- function(full_X, samples){ 
+  full_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
+  full_X_mean[c("treated", "head_age", "year", 
+                "treated_year", "treated_age", "year_age", 
+                "treated_year_age")] <- c(1, full_X_mean["head_age"], 1,
+                                          1*1, 1*full_X_mean["head_age"],full_X_mean["head_age"]*1,
+                                          full_X_mean["head_age"]*1*1)
+ 
+  gamma_samps <- do.call("cbind", rstan::extract(samples, par = c("gamma1","gamma2")))
+  rho_samps <- rstan::extract(samples, par = c("rho"))[[1]]
+  beta_samps <- do.call("cbind", rstan::extract(samples, par = c("beta")))
+  
+  all <- list()
+  j = 0
+for (a in seq(from = -1, to = 1, by = .25)) {  
+  j = j + 1
+  print(a)
+age_X_mean <- c(1,apply(full_X, 2, mean))[1:8]
+age_X_mean[c("treated", "head_age", "year", 
+                 "treated_year", "treated_age", "year_age", 
+                 "treated_year_age")] <- c(1, a, 1,
+                                           1*1, 1*a,a*1,
+                                           a*1*1)
+  
+  #CHOICE effect
+  temp1 <- apply(gamma_samps, 1, function(x){exp(x%*%age_X_mean)}) #exp(X*gamma) = lambda(1)
+  temp2 <- exp(-apply(gamma_samps[,c(5,8)], 1, function(x){x%*%age_X_mean[c(5,8)]})) # 1/exp(g2 + g3*0)
+  dudb_younger <- temp1*(temp2-1)*rho_samps
+  
+  #CAPABILITIES effect
+  #younger effect
+  dcdb_younger <- beta_samps[,4] + beta_samps[,7]*a
+  
+  #FUNCTIONING effect 
+  dydb_younger <-   dcdb_younger   + dudb_younger
+  
+  
+  all[[j]] <- rbind(
+               data.frame(effect = dydb_younger, type = "Functioning", age = a), 
+
+               data.frame(effect = dudb_younger, type = "Choice", age = a), 
+               
+               data.frame(effect = dcdb_younger, type = "Capabilities", age = a))
+  
+}
+  
+  all <-do.call(rbind, all) 
+  
+return(all)
+  
+    
 }
 
 
