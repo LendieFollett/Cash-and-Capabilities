@@ -20,7 +20,6 @@ options(warn=-1)
 
 kenya <- read.csv("raw_data/ctovc_final_cg.csv")
 
-kenya_old <- read.csv("raw_data/ctovc_final.csv")
 
 # exploratory ---------------------------
 
@@ -36,7 +35,7 @@ kenya %>%
 #Pre propensity/distance matching
 
 kenya_sub <- kenya %>%  
-  subset(year == 0, select = c("hhcode","treated","head_age","hhsize", "non_active", "head_educ","depend_ratio", "sex_ratio",
+  subset(year == 0, select = c("hhcode","treated","caregiver","hhsize", "non_active", "head_educ","depend_ratio", "sex_ratio",
                                "ovc", "initial_exp",
                                "adult_educ", "rooms", "head_sex", "head_married", "head_sick",'elderly',
                                'agriculture', 'salaried', 'casual', 'self',
@@ -65,19 +64,32 @@ matched_rf <- rbind(kenya_sub[matches_rf$index.treated,],
 
 #matched_rf <- kenya_sub[pscores_rf > quantile(pscores_rf, .2) & pscores_rf < quantile(pscores_rf, .8),] #didn't work as well
 
-std_diffs_rf <- matched_rf[,-1]  %>%
+std_diffs_1 <- kenya_sub[,-1]  %>%
   melt(id.var = "treated") %>%
   group_by(variable, treated)%>%
   summarise(meanvariable = mean(value),
             varvariable = var(value),
-            n = length(value)) %>% 
+            n = length(value),
+            c025 = quantile(value, .025),
+            c975 = quantile(value, 0.975)) %>% 
   ungroup()%>%
   gather(variable2, value, -(treated:variable)) %>%
   unite(temp, variable2, treated) %>%
   spread(temp, value)%>%
   mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2),
+         lrsd = log(sqrt(varvariable_1)/sqrt(varvariable_0)),
          variablef = reorder(variable, std_diff),
-         method = "Matched")
+         method = "Original")
+
+#calculate TCP
+std_diffs_tcp <- kenya_sub[,-1]  %>%
+  melt(id.var = "treated") %>% 
+  filter(treated == 1) %>% 
+  merge(std_diffs_1[,c("variable", "c025_0", "c975_0")]) %>% 
+  group_by(variable) %>% 
+  summarise(TCP = mean(value < c025_0 | value >c975_0 )) 
+
+std_diffs <- merge(std_diffs_1, std_diffs_tcp, by = "variable")
 
 #------------ RANDOM FOREST 2-----------
 #RANDOM FOREST 2 - use both propensity scores AND proximity matrix to match
@@ -215,10 +227,10 @@ rbind(std_diffs_orig,
 
 
 #TABLE 2  
-merge(std_diffs_orig[,c(1,2,3,6,7,8)],std_diffs_rf[,c(1,8)],by = "variable")%>% 
-  mutate_at(c('meanvariable_0', 'meanvariable_1', "std_diff.x", "std_diff.y"), round, 2) %>%
+std_diffs%>% 
+  mutate_at(c('meanvariable_0', 'meanvariable_1','std_diff', 'lrsd', 'TCP'), round, 2) %>%
   mutate_at(c('varvariable_0', 'varvariable_1'), sqrt) %>%
-  mutate(variablef = factor(variable, levels = c("head_age"  ,"elderly"  ,"head_sex" ,"head_married" ,  
+  mutate(variablef = factor(variable, levels = c("caregiver"  ,"elderly"  ,"head_sex" ,"head_married" ,  
                                                  "head_educ"  , "head_sick" ,
                                                  "ovc"  ,"hhsize" , "age_5under" ,"age_0617",  "age_1834" ,  "age_3549",  "age_5064",
                                                  "depend_ratio"  , "sex_ratio" ,  "adult_educ" ,       "non_active"  , "initial_exp"  ,
@@ -226,7 +238,7 @@ merge(std_diffs_orig[,c(1,2,3,6,7,8)],std_diffs_rf[,c(1,8)],by = "variable")%>%
                                                  "land" ,  "livestock" , "water" , "bike" , "radio" ,  "phone" ,  
                                                  "mosquito" , "road" , "market" ,  "communication" , "electricity" ),
                             labels = 
-                              c("Age of head (years)",  
+                              c("Age of caregiver (years)",  
                                 "Head over 64 years (yes=1) ",  
                                 "Female head (yes=1) ",  
                                 "Married head (yes=1)  ",  
@@ -262,7 +274,7 @@ merge(std_diffs_orig[,c(1,2,3,6,7,8)],std_diffs_rf[,c(1,8)],by = "variable")%>%
                                 "Majority of village has access to phone (yes=1) ",
                                 "Majority of village has electricity (yes=1)")))%>%
   arrange(variablef)%>%
-  dplyr::select(c(8, 2,3,4,5,6 )) %>%
+  dplyr::select(c(14,8,7,11,6,10,12,13,14,16  )) %>%
   xtable() %>% print(include.rownames=FALSE)
 
 
@@ -300,12 +312,12 @@ median_age <- median(filter(kenya, sample_nutrition == 1)$caregiver)
 
 kenya$caregiver <- ifelse(kenya$caregiver >=median_age, 1, 0) #1 if older
 #based on matching or not, what hh codes are we using?
-usehh <-unique(kenya$hhcode) #if using whole data set
-#usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
+#usehh <-unique(kenya$hhcode) #if using whole data set
+usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
 kenya <- subset(kenya, hhcode %in% usehh)
 
 #what folder should the rstan RDS files be safed
-subfolder <- "Original"#"Matched"#
+subfolder <- "Matched"#"Original"#
 
 full_X <- kenya%>%
   mutate(land = ihs_trans(land),
@@ -534,7 +546,7 @@ ggsave(paste(subfolder,"cal_animv_CS.pdf", sep = "/" ))
 plot_cs(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=TRUE)
 ggsave(paste(subfolder,"cal_micro_CS.pdf", sep = "/" ))
 
-plot_cs(sampled=cal_pd_sampled,       y=ihs_trans(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans=TRUE)
+plot_cs(sampled=cal_pd_sampled,       y=log(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans=TRUE)
 ggsave(paste(subfolder,"cal_pd_CS.pdf", sep = "/" ))
 
 
@@ -578,7 +590,7 @@ trt <- rbind(
   data.frame(derivatives(full_X, cal_anim_sampled),    y = "animal products")
    ) %>% 
   mutate(y = factor(y, levels = c("caloric intake", "dietary diversity", "animal products",
-                                  "fruits and vegetables", "micronutrients", "stunting", "wasting", "underweight")))
+                                  "fruits and vegetables", "micronutrients", "stunting", "wasting", "underweight")[8:1]))
 
 
 #summary stats - transformed scale
