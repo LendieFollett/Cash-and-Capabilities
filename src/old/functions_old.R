@@ -4,6 +4,7 @@ gel_stand <- function(x){(x - mean(x))/(2*sd(x))}
 
 #Inverse hyperbolic sine transformation
 ihs_trans <- function(x){log(x + sqrt(x^2 + 1))}
+hs_trans <- function(x){(exp(x) - exp(-x))/2}
 
 #In terms of standard deviation of un-treated
 y_stand <- function(x, data){
@@ -84,7 +85,7 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,kappa,file){
                          pars = par_keep,
                          include=TRUE,
                          init = inits,
-                         control = list(adapt_delta = 0.95)) 
+                         control = list(adapt_delta = 0.9)) 
   return(sm_sampled)
 }  #Sample with rstan
   #sm_sampled <- sampling(compiled_selection_model, 
@@ -111,12 +112,15 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
   #draws from counterfactual posterior predictive (CS)
   f_pred_cntr <-  rstan::extract(sampled, "f_pred_cntr")%>%
     data.frame()
-  if (backtrans == TRUE) {
+  if (backtrans == "log") {
     f_pred_trt <- exp(f_pred_trt)
     f_pred_cntr<- exp(f_pred_cntr)
     y <- exp(y)
+  } else if(backtrans == "IHS"){
+    f_pred_trt <- hs_trans(f_pred_trt)
+    f_pred_cntr<- hs_trans(f_pred_cntr)
+    y <- hs_trans(y) 
   }
-  
   
   todo = which(data[,"treated"] == 1 & data[,"year"] == 1)
   d <-  data[todo,]
@@ -155,10 +159,14 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
   #draws from counterfactual posterior predictive (CS)
   f_pred_cntr <-  rstan::extract(sampled, "f_pred_cntr")%>%
     data.frame()
-  if (backtrans == TRUE) {
+  if (backtrans == "log") {
     f_pred_trt <- exp(f_pred_trt)
     f_pred_cntr<- exp(f_pred_cntr)
     y <- exp(y)
+  } else if(backtrans == "IHS"){
+    f_pred_trt <- hs_trans(f_pred_trt)
+    f_pred_cntr<- hs_trans(f_pred_cntr)
+    y <- hs_trans(y) 
   }
   
   
@@ -167,16 +175,16 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
   
   data.frame(f =y[todo],
              missing = is.na(y[todo]),
-             sex = factor(d$head_age, levels = c(0,1), labels = c("Younger", "Older")),
+             age = factor(d$caregiver, levels = c(0,1), labels = c("Younger", "Older")),
              lb_trt =   apply(f_pred_trt , 2, "quantile", c(0.05)),
              ub_trt =   apply(f_pred_trt , 2, "quantile", c(0.95)),
              lb_notrt = apply(f_pred_cntr, 2, "quantile", c(0.05)),
              ub_notrt = apply(f_pred_cntr, 2, "quantile", c(0.95))) %>%
     arrange( ub_notrt)%>%
-    mutate(id = c(1:length(d$head_age))) %>%
+    mutate(id = c(1:length(d$caregiver))) %>%
     subset(missing == FALSE)%>%
     ggplot() +
-    geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt), colour = "grey50") +
+    geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt),colour = "grey50") +#colour = "grey50"
     geom_line(aes(x=id, y=lb_notrt  )) +
     geom_line(aes(x=id, y=ub_notrt )) +
     labs(x = "Household ID", y = response)+

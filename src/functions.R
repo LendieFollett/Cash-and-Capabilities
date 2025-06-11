@@ -72,7 +72,7 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,file){
                           warmup = 1000,
                           thin =2,
                           init = inits,
-                          control = list(adapt_delta = 0.8)) 
+                          control = list(adapt_delta = 0.95)) 
   return(sm_sampled)
 }
 

@@ -312,12 +312,12 @@ median_age <- median(filter(kenya, sample_nutrition == 1)$caregiver)
 
 kenya$caregiver <- ifelse(kenya$caregiver >=median_age, 1, 0) #1 if older
 #based on matching or not, what hh codes are we using?
-#usehh <-unique(kenya$hhcode) #if using whole data set
-usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
+usehh <-unique(kenya$hhcode) #if using whole data set
+#usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
 kenya <- subset(kenya, hhcode %in% usehh)
 
 #what folder should the rstan RDS files be safed
-subfolder <- "Matched"#"Original"#
+subfolder <- "Original"#"Matched"#
 
 full_X <- kenya%>%
   mutate(land = ihs_trans(land),
@@ -511,14 +511,14 @@ stan_trace(cal_fv_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "si
 #Summarise R-hat values, effective sample sizes
 #sort by rhat, n_eff, see trouble spots
 #matched : original
-summary(diversity_sampled)$summary %>% View  #original:ok (low =93) 05/07/25 
-summary(stunting_sampled)$summary %>%View   #original: good 05/05/2025     
-summary(wasting_sampled)$summary %>%View    #original: good 05/05/2025
-summary(underweight_sampled)$summary %>%View#original: good  05/05/2025
-summary(cal_pd_sampled)$summary %>% View # original: good 05/07/2025
-summary(cal_micro_sampled)$summary %>% View # original: good 05/07/2025
-summary(cal_fv_sampled)$summary %>% View # original: good 05/07/25
-summary(cal_anim_sampled)$summary %>% View # original: good 05/07/25
+summary(diversity_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%   View  #original:ok (low =93) 05/07/25 matched:good 6/11
+summary(stunting_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%View   #original: good 05/05/2025   matched: good 6/11/25  
+summary(wasting_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%View    #original: good 05/05/2025 matched: ok 6/11 lowest 63
+summary(underweight_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%View#original: good  05/05/2025 matched: good 6/11
+summary(cal_pd_sampled)$summary %>% as.data.frame() %>% arrange(n_eff) %>%View # original: good 05/07/2025 matched: good 6/11/25
+summary(cal_micro_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% View # original: good 05/07/2025 matched: good 6/11
+summary(cal_fv_sampled)$summary %>% as.data.frame() %>% arrange(n_eff) %>%View # original: good 05/07/25 matched: good 6/21
+summary(cal_anim_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% View # original: good 05/07/25 matched: good
 
 
 # Treatment effects ---------------------------
@@ -537,16 +537,16 @@ ggsave(paste(subfolder,"wasting_CS.pdf", sep = "/" ))
 plot_cs(sampled=stunting_sampled,       y=nutrition_data$stunting,      response =  "stunting",       data = nutrition_data)
 ggsave(paste(subfolder,"stunting_CS.pdf", sep = "/" ))
 
-plot_cs(sampled=cal_fv_sampled,       y=ihs_trans(kenya$cal_fv_windsor),      response =  "fruits and vegetables",       data = kenya, backtrans=TRUE)
+plot_cs(sampled=cal_fv_sampled,       y=ihs_trans(kenya$cal_fv_windsor),      response =  "fruits and vegetables",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_fv_CS.pdf", sep = "/" ))
 
-plot_cs(sampled=cal_anim_sampled,       y=ihs_trans(kenya$cal_anim_windsor),      response =  "animal products",       data = kenya, backtrans=TRUE)
+plot_cs(sampled=cal_anim_sampled,       y=ihs_trans(kenya$cal_anim_windsor),      response =  "animal products",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_animv_CS.pdf", sep = "/" ))
 
-plot_cs(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=TRUE)
+plot_cs(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_micro_CS.pdf", sep = "/" ))
 
-plot_cs(sampled=cal_pd_sampled,       y=log(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans=TRUE)
+plot_cs(sampled=cal_pd_sampled,       y=log(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans="log")
 ggsave(paste(subfolder,"cal_pd_CS.pdf", sep = "/" ))
 
 
@@ -564,16 +564,16 @@ ggsave(paste(subfolder,"wasting_CS_agg.pdf", sep = "/" ))
 plot_cs_agg(sampled=stunting_sampled,       y=nutrition_data$stunting,      response =  "stunting",       data = nutrition_data)
 ggsave(paste(subfolder,"stunting_CS_agg.pdf", sep = "/" ))
 
-plot_cs_agg(sampled=cal_fv_sampled,       y=ihs_trans(kenya$cal_fv_windsor),      response =  "fruits and vegetables",       data = kenya, backtrans=TRUE)
+plot_cs_agg(sampled=cal_fv_sampled,       y=ihs_trans(kenya$cal_fv_windsor),      response =  "fruits and vegetables",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_fv_CS_agg.pdf", sep = "/" ))
 
-plot_cs_agg(sampled=cal_anim_sampled,       y=ihs_trans(kenya$cal_anim_windsor),      response =  "animal products",       data = kenya, backtrans=TRUE)
+plot_cs_agg(sampled=cal_anim_sampled,       y=ihs_trans(kenya$cal_anim_windsor),      response =  "animal products",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_animv_CS_agg.pdf", sep = "/" ))
 
-plot_cs_agg(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=TRUE)
+plot_cs_agg(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_micro_CS_agg.pdf", sep = "/" ))
 
-plot_cs_agg(sampled=cal_pd_sampled,       y=ihs_trans(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans=TRUE) 
+plot_cs_agg(sampled=cal_pd_sampled,       y=ihs_trans(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans="log") 
 ggsave(paste(subfolder,"cal_pd_CS_agg.pdf", sep = "/" ))
 
 
@@ -590,7 +590,9 @@ trt <- rbind(
   data.frame(derivatives(full_X, cal_anim_sampled),    y = "animal products")
    ) %>% 
   mutate(y = factor(y, levels = c("caloric intake", "dietary diversity", "animal products",
-                                  "fruits and vegetables", "micronutrients", "stunting", "wasting", "underweight")[8:1]))
+                                  "fruits and vegetables", "micronutrients", "stunting", "wasting", "underweight")[8:1]),
+         type = factor(type, levels = c("Functioning", "Capabilities", "Choice")[c(3,2,1)]))
+  
 
 
 #summary stats - transformed scale
