@@ -21,16 +21,7 @@ options(warn=-1)
 kenya <- read.csv("raw_data/ctovc_final_cg.csv")
 
 
-# exploratory ---------------------------
-
-kenya %>%
-  mutate(treated_year = interaction(treated, year),
-         expenditure = ihs_trans(expenditure),
-         micro = ihs_trans(micro),
-         education1 = ihs_trans(education1)) %>%
-  ggduo(columnsY = c("expenditure", "micro", "education1", "diversity", "schooling", "illness1", "enrolled"),
-        columnsX = c("treated_year","hhsize"),
-        mapping = aes(colour = treated))
+# Random forest propensity ---------------------------
 
 #Pre propensity/distance matching
 
@@ -45,12 +36,13 @@ kenya_sub <- kenya %>%
 
 # RANDOM FOREST
 #trying random forest because: (1) interactions are built in (2) no need for transformations / linearity (3) deals with NAs if we do this step pre imputation
+set.seed(22375)
 rf <- randomForest(as.factor(treated) ~ ., data = kenya_sub[,-1],
                    ntree = 1000,
                    proximity = TRUE,
                    seed=48394639)
 pscores_rf <- predict(rf, type = "prob")[,2]
-
+head(pscores_rf)
 # n <- names(data.frame( pscores_rf, rf$proximity))
 # f <- as.formula(paste("treated ~", paste(n[!n %in% c("treated")], collapse = " + ")))
 # matches_rf1 <- matchit(f, method = "nearest", data=data.frame(treated = kenya_sub$treated, pscores_rf, rf$proximity))
@@ -61,7 +53,6 @@ matches_rf <- Match(Y = NULL, Tr= 1-kenya_sub$treated, X = pscores_rf,replace = 
 
 matched_rf <- rbind(kenya_sub[matches_rf$index.treated,],
                     kenya_sub[matches_rf$index.control,])
-
 #matched_rf <- kenya_sub[pscores_rf > quantile(pscores_rf, .2) & pscores_rf < quantile(pscores_rf, .8),] #didn't work as well
 
 std_diffs_1 <- kenya_sub[,-1]  %>%
@@ -91,109 +82,6 @@ std_diffs_tcp <- kenya_sub[,-1]  %>%
 
 std_diffs <- merge(std_diffs_1, std_diffs_tcp, by = "variable")
 
-#------------ RANDOM FOREST 2-----------
-#RANDOM FOREST 2 - use both propensity scores AND proximity matrix to match
-#proximity matrix is based on the frequency with which observations fall in the same nodes in the trees
-set.seed(9235728)
-matches_rf2 <- Match(Y = NULL, Tr= 1-kenya_sub$treated, X = cbind(pscores_rf,  rf$proximity),
-                     caliper = c(.5, rep(Inf, ncol(rf$proximity))),
-                     replace = FALSE)
-
-matched_rf2 <- rbind(kenya_sub[matches_rf2$index.treated,],
-                     kenya_sub[matches_rf2$index.control,])
-std_diffs_rf2 <- matched_rf2[,-1]  %>%
-  melt(id.var = "treated") %>%
-  group_by(variable, treated)%>%
-  summarise(meanvariable = mean(value),
-            varvariable = var(value),
-            n = length(value)) %>% 
-  ungroup()%>%
-  gather(variable2, value, -(treated:variable)) %>%
-  unite(temp, variable2, treated) %>%
-  spread(temp, value)%>%
-  mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2),
-         variablef = reorder(variable, std_diff),
-         method = "rf2")
-
-#------------ RANDOM FOREST 3-----------
-# RANDOM FOREST 3 - still use both propensity scores AND proximity matrix to match
-# but algorithm aligns more closely with Zhao paper
-
-prox_mat <- rf$proximity - diag(ncol(rf$proximity)) #diagonals are 0 (will be looking for max w/in each row) - O.W., bigger means 'closer'
-prop_calip <- (pscores_rf %>% dist(diag = TRUE, upper = TRUE)%>%as.matrix())< .25*sd(pscores_rf) %>% as.numeric()#FALSE (0) if pscores too far apart
-prop_prox <-prox_mat*prop_calip
-
-prox_treat <- prop_prox[kenya_sub$treated == 1 & pscores_rf < .8 & pscores_rf > .2, kenya_sub$treated == 0] #rows for treated ONLY, columns for control ONLY
-prox_control <- prop_prox[kenya_sub$treated == 0, kenya_sub$treated == 1] #rows for control ONLY, columns for treated ONLY
-prox_treat %>% dim; prox_control %>% dim
-treated.samples <- apply(prox_control, 1, function(x){which.max(x)[1]}) #for each of the 701 controls, which is the closest treated? i.e., treated indices we want to keep
-control.samples <- apply(prox_treat, 1, function(x){which.max(x)[1]}) #for each of the 701 controls, which is the closest treated? i.e., treated indices we want to keep
-
-for (idx in which(duplicated(control.samples))){
-  if (prox_treat[idx,order(prox_treat[idx,], decreasing=TRUE)[2]] == 0){
-    print("no match made")
-    control.samples[idx] <- NA
-  } else{
-    control.samples[idx] <- order(prox_treat[idx,], decreasing=TRUE)[2]
-  }
-}
-
-for (idx in which(duplicated(control.samples))){
-  
-  if (prox_treat[idx,order(prox_treat[idx,], decreasing=TRUE)[3]] == 0){
-    print("no match made")
-    control.samples[idx] <- NA
-  } else{
-    control.samples[idx] <- order(prox_treat[idx,], decreasing=TRUE)[3]
-  }
-}
-
-
-matched_rf3 <- rbind(subset(kenya_sub, treated == 0)[unique(control.samples[!is.na(control.samples)]),],
-                     subset(kenya_sub, treated == 1 & pscores_rf < .8 & pscores_rf > .2)[which(!is.na(control.samples)),])
-
-std_diffs_rf3 <- matched_rf3[,-1]  %>%
-  melt(id.var = "treated") %>%
-  group_by(variable, treated)%>%
-  summarise(meanvariable = mean(value),
-            varvariable = var(value),
-            n = length(value)) %>% 
-  ungroup()%>%
-  gather(variable2, value, -(treated:variable)) %>%
-  unite(temp, variable2, treated) %>%
-  spread(temp, value)%>%
-  mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2),
-         variablef = reorder(variable, std_diff),
-         method = "rf3")
-
-
-
-
-#------------ LOGISTIC REGRESSION-----------
-lr <- glm(treated ~ ., data = kenya_sub[,-1],family = "binomial")
-
-pscores_lr <- predict(lr, type = "response")
-set.seed(9235728)
-matches_lr <- Match(Y = NULL, Tr= 1-kenya_sub$treated, X = pscores_lr,replace = FALSE, caliper = 1)
-
-matched_lr <- rbind(kenya_sub[matches_lr$index.treated,],
-                    kenya_sub[matches_lr$index.control,])
-
-
-std_diffs_lr <- matched_lr[,-1]  %>%
-  melt(id.var = "treated") %>%
-  group_by(variable, treated)%>%
-  summarise(meanvariable = mean(value),
-            varvariable = var(value),
-            n = length(value)) %>% 
-  ungroup()%>%
-  gather(variable2, value, -(treated:variable)) %>%
-  unite(temp, variable2, treated) %>%
-  spread(temp, value)%>%
-  mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2),
-         variablef = reorder(variable, std_diff),
-         method = "lr")
-
 
 #------------ compare-----------
 
@@ -212,17 +100,6 @@ std_diffs_orig <- kenya_sub[,-1] %>%
   mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2), #two variances
          variablef = reorder(variable, abs(std_diff)),
          method = "Original")
-
-rbind(std_diffs_orig,
-      std_diffs_rf)%>%
-  #std_diffs_rf2,
-  #std_diffs_rf3,
-  #std_diffs_lr)%>%
-  ggplot() + 
-  #geom_line(aes(x = variablef, y = abs(std_diff), colour = method, group = method)) + 
-  geom_point(aes(x = variablef, y = abs(std_diff),  fill = method), colour = "black", shape=21, stroke=1.5) + 
-  scale_fill_manual(values = c("black", "white")) +
-  coord_flip() + labs(y = "Absolute Standardized Difference in Means", x = "X variable") + theme_bw()
 
 
 
@@ -276,34 +153,6 @@ std_diffs%>%
   arrange(variablef)%>%
   dplyr::select(c(14,8,7,11,6,10,12,13,14,16  )) %>%
   xtable() %>% print(include.rownames=FALSE)
-
-
-#see whole distributions: continuous-ish
-rbind(mutate(matched_lr, method = "lr"),
-      mutate(matched_rf, method = "rf"),
-      mutate(matched_rf2, method = "rf2"),
-      mutate(matched_rf3, method = "rf3"),
-      mutate(kenya_sub, method = "original"))%>%
-  subset(select = c("depend_ratio", "sex_ratio", "head_age", "initial_exp","method", "hhcode", "treated", "ovc", "head_educ","adult_educ", "non_active", "hhsize", 
-                    "age_0617", "age_5under", "age_1834", "age_5064","age_3549", "rooms", "land"))%>%
-  melt( id.vars = c("method", "hhcode", "treated")) %>%
-  mutate(treated = as.factor(treated))%>%
-  ggplot() +
-  geom_histogram(aes(x = value, fill = treated), position = "identity", alpha = I(.6)) +
-  facet_grid(method~variable, scales = "free")
-
-#see whole distributions: discrete
-rbind(mutate(matched_lr, method = "lr"),
-      mutate(matched_rf, method = "rf"),
-      mutate(matched_rf2, method = "rf2"),
-      mutate(kenya_sub, method = "original"))%>%
-  subset(select = -c(depend_ratio, sex_ratio, head_age, initial_exp, ovc, head_educ, hhsize,age_0617, non_active,age_5under, age_1834, age_5064,age_3549,adult_educ, rooms, land))%>%
-  melt( id.vars = c("method", "hhcode", "treated")) %>%
-  mutate(treated = as.factor(treated),
-         value = as.character(value))%>%
-  ggplot() +
-  geom_bar(aes(x = value, fill = treated), position = "dodge") +
-  facet_grid(method~variable, scales = "free")
 
 
 # X matrix ---------------------------
@@ -525,7 +374,7 @@ summary(cal_anim_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% View
 #capability set plots
 #grey errorbar = treated
 #black line - control
-plot_cs(sampled=diversity_sampled,       y=y_stand(kenya$diversity, kenya),      response =  "dietary diversity",       data = kenya)
+plot_cs(sampled=diversity_sampled,       y=y_stand(kenya$diversity, kenya),      response =  "dietary diversity",       data = kenya, backtrans = "diversity")
 ggsave(paste(subfolder,"diversity_CS.pdf", sep = "/" ))
 
 plot_cs(sampled=underweight_sampled, y = nutrition_data$underweight, response = "underweight",data = nutrition_data)
@@ -573,7 +422,7 @@ ggsave(paste(subfolder,"cal_animv_CS_agg.pdf", sep = "/" ))
 plot_cs_agg(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans="IHS")
 ggsave(paste(subfolder,"cal_micro_CS_agg.pdf", sep = "/" ))
 
-plot_cs_agg(sampled=cal_pd_sampled,       y=ihs_trans(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans="log") 
+plot_cs_agg(sampled=cal_pd_sampled,       y=log(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans="log") 
 ggsave(paste(subfolder,"cal_pd_CS_agg.pdf", sep = "/" ))
 
 

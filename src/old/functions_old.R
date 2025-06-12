@@ -12,6 +12,11 @@ y_stand <- function(x, data){
   (x - mean(x2,na.rm = TRUE))/(sd(x2,na.rm = TRUE))
 }
 
+iy_stand <- function(x, data){
+  x2 <-x[data$treated == 0]
+  x*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)
+}
+
 ##########do_sampling()-------------
 #y = column of responses (including NA for missings, pre-transformed if needed)
 #X = matrix of predictor variables, pre-standardized
@@ -120,6 +125,11 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
     f_pred_trt <- hs_trans(f_pred_trt)
     f_pred_cntr<- hs_trans(f_pred_cntr)
     y <- hs_trans(y) 
+  }else if(backtrans=="diversity"){
+    x2 <-kenya$diversity[kenya$treated == 0]
+    f_pred_trt <- f_pred_trt*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)
+    f_pred_cntr<- f_pred_cntr*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)#
+    y <- y*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)#
   }
   
   todo = which(data[,"treated"] == 1 & data[,"year"] == 1)
@@ -167,6 +177,11 @@ plot_cs_agg <- function(sampled, y, response, data,  backtrans = FALSE){
     f_pred_trt <- hs_trans(f_pred_trt)
     f_pred_cntr<- hs_trans(f_pred_cntr)
     y <- hs_trans(y) 
+  }else if(backtrans=="diversity"){
+    x2 <-kenya$diversity[kenya$treated == 0]
+    f_pred_trt <- f_pred_trt*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)
+    f_pred_cntr<- f_pred_cntr*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)#
+    y <- y*sd(x2,na.rm = TRUE) + mean(x2,na.rm = TRUE)
   }
   
   
