@@ -115,16 +115,19 @@ generated quantities {
     vector[N_subset] f_pred;
     vector[N_subset] f_pred_cntr;
     real u_cntr[N_subset];
+    real u_f[N_subset];
 
 
     for (n in 1:N_subset) {
         int i = subset_indices[n];
         real alpha_tau = alpha[hh[i]]+tau[loc[i]];
-        c[n] = alpha_tau + X[i] * beta; // factual potential
+        c[n] =      alpha_tau + X[i] * beta; // factual potential
         c_cntr[n] = alpha_tau + X_cntr[i] * beta; // counterfactual potential
+        
         u_cntr[n] = exponential_rng(1. / exp(gamma1 + X_cntr[i, 1:7] * gamma2)); // counterfactual deviation
-
-        f_pred[n] = normal_rng(c[n] - bernoulli_rng(rho) * u[i], sigma_v);
+        u_f[n] = exponential_rng(1. / exp(gamma1 + X[i, 1:7] * gamma2)); //factual deviation
+        
+        f_pred[n] =      normal_rng(c[n] - bernoulli_rng(rho) * u_f[n], sigma_v);
         f_pred_cntr[n] = normal_rng(c_cntr[n] - bernoulli_rng(rho) * u_cntr[n], sigma_v);
     }
 }

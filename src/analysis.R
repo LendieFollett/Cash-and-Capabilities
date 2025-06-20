@@ -360,14 +360,14 @@ stan_trace(cal_fv_sampled, par = c("phi","gamma1", "gamma2[4]", "gamma2[7]", "si
 #Summarise R-hat values, effective sample sizes
 #sort by rhat, n_eff, see trouble spots
 #matched : original
-summary(diversity_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%   View  #original:ok (low =93) 05/07/25 matched:good 6/11
-summary(stunting_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%View   #original: good 05/05/2025   matched: good 6/11/25  
-summary(wasting_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%View    #original: good 05/05/2025 matched: ok 6/11 lowest 63
-summary(underweight_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%View#original: good  05/05/2025 matched: good 6/11
-summary(cal_pd_sampled)$summary %>% as.data.frame() %>% arrange(n_eff) %>%View # original: good 05/07/2025 matched: good 6/11/25
-summary(cal_micro_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% View # original: good 05/07/2025 matched: good 6/11
-summary(cal_fv_sampled)$summary %>% as.data.frame() %>% arrange(n_eff) %>%View # original: good 05/07/25 matched: good 6/21
-summary(cal_anim_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% View # original: good 05/07/25 matched: good
+summary(diversity_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%   head(6)  #original:ok (low =93) 05/07/25 matched:good 6/11
+summary(stunting_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%head(6)   #original: good 05/05/2025   matched: good 6/11/25  
+summary(wasting_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%head(6)    #original: good 05/05/2025 matched: ok 6/11 lowest 63
+summary(underweight_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>%head(6)#original: good  05/05/2025 matched: good 6/11
+summary(cal_pd_sampled)$summary %>% as.data.frame() %>% arrange(n_eff) %>%head(6) # original: good 05/07/2025 matched: good 6/11/25
+summary(cal_micro_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% head(6) # original: good 05/07/2025 matched: good 6/11
+summary(cal_fv_sampled)$summary %>% as.data.frame() %>% arrange(n_eff) %>%head(6) # original: good 05/07/25 matched: good 6/21
+summary(cal_anim_sampled)$summary %>%as.data.frame() %>% arrange(n_eff) %>% head(6) # original: good 05/07/25 matched: good
 
 
 # Treatment effects ---------------------------
@@ -398,13 +398,20 @@ ggsave(paste(subfolder,"cal_micro_CS.pdf", sep = "/" ))
 plot_cs(sampled=cal_pd_sampled,       y=log(kenya$cal_pd_windsor),      response =  "caloric intake",       data = kenya, backtrans="log")
 ggsave(paste(subfolder,"cal_pd_CS.pdf", sep = "/" ))
 
+#untransformed
+plot_cs(sampled=cal_anim_sampled,       y=ihs_trans(kenya$cal_anim_windsor),      response =  "animal products",       data = kenya, backtrans=FALSE)
+ggsave(paste(subfolder,"cal_animv_CS_UNTRANSFORMED.pdf", sep = "/" ))
+#send sentence explaining droopiness - household random effects
+
+plot_cs(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=FALSE) 
+ggsave(paste(subfolder,"cal_micro_CS_UNTRANSFORMED.pdf", sep = "/" ))
 
 
 #capability set plots AGGREGATED
 plot_cs_agg(sampled=underweight_sampled, y = nutrition_data$underweight, response = "underweight",data = nutrition_data)
 ggsave(paste(subfolder,"underweight_CS_agg.pdf", sep = "/" ))
 
-plot_cs_agg(sampled=diversity_sampled,       y=y_stand(kenya$diversity, kenya),      response =  "dietary diversity",       data = kenya)
+plot_cs_agg(sampled=diversity_sampled,       y=y_stand(kenya$diversity, kenya),      response =  "dietary diversity",       data = kenya, backtrans = "diversity")
 ggsave(paste(subfolder,"diversity_CS_agg.pdf", sep = "/" ))
 
 plot_cs_agg(sampled=wasting_sampled,       y=nutrition_data$wasting,      response =  "wasting",       data = nutrition_data)
@@ -426,6 +433,12 @@ plot_cs_agg(sampled=cal_pd_sampled,       y=log(kenya$cal_pd_windsor),      resp
 ggsave(paste(subfolder,"cal_pd_CS_agg.pdf", sep = "/" ))
 
 
+plot_cs_agg(sampled=cal_anim_sampled,       y=ihs_trans(kenya$cal_anim_windsor),      response =  "animal products",       data = kenya, backtrans=FALSE)
+ggsave(paste(subfolder,"cal_animv_CS_agg_UNTRANSFORMED.pdf", sep = "/" ))
+#send sentence explaining droopiness - household random effects
+
+plot_cs_agg(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=FALSE) 
+ggsave(paste(subfolder,"cal_micro_CS_agg_UNTRANSFORMED.pdf", sep = "/" ))
 ###############################################
 
 trt <- rbind(   
@@ -472,11 +485,11 @@ filter(trt, by == "Overall") %>%
   theme(axis.text.x = element_text(angle = 45)) +
   scale_colour_grey("")+
   labs(x = "", y = "Treatment Effect")+guides(color = guide_legend(reverse = TRUE))
-ggsave(paste(subfolder, "/trt_effects.pdf", sep = "/"), width = 8, height =7, units = "in" )
+ggsave(paste(subfolder, "/trt_effects_agg.pdf", sep = "/"), width = 8, height =7, units = "in" )
 
 
 
-#By gender
+#By age
 
 filter(trt, by != "Overall") %>%
   group_by(type, y, by)%>%
@@ -492,6 +505,6 @@ filter(trt, by != "Overall") %>%
   theme(axis.text.x = element_text(angle = 45)) +
   scale_colour_grey("")+guides(color = guide_legend(reverse = TRUE)) +
   labs(x = "", y = "Treatment Effect") 
-ggsave(paste(subfolder, "trt_effects_gender.pdf", sep = "/"), width = 9, height =7, units = "in" )
+ggsave(paste(subfolder, "trt_effects.pdf", sep = "/"), width = 9, height =7, units = "in" )
 
 

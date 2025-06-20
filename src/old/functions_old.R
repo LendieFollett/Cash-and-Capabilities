@@ -110,6 +110,27 @@ do_sampling <- function(y, X, X_cntr, hh_id, loc_id,kappa,file){
 #data = kenya data frame
 #backtrans = logical TRUE if on original (untransformed) scale
 
+#f_pred_trt <-  rstan::extract(sampled, "f_pred")%>%
+#  data.frame() 
+#draws from counterfactual posterior predictive (CS)
+#f_pred_cntr <-  rstan::extract(sampled, "f_pred_cntr")%>%
+ # data.frame()
+
+#u_pred <-  rstan::extract(sampled, "u")%>%
+#  data.frame() 
+#u_pred <- u_pred[,todo]
+
+#draws from counterfactual posterior predictive (CS)
+#u_pred_cntr <-  rstan::extract(sampled, "u_cntr")%>%
+#  data.frame()
+
+#grid.arrange(ggplot() + geom_histogram(aes(u_pred[,6])) + ggtitle("Treatment U distribution") + xlim(0,20),
+#ggplot() + geom_histogram(aes(u_pred_cntr[,6]))+ ggtitle("Control U distribution")+ xlim(0,20))
+
+#grid.arrange(ggplot() + geom_histogram(aes(f_pred_trt[,6])) + ggtitle("Treatment Functioning distribution")+ xlim(-10,10),
+#             ggplot() + geom_histogram(aes(f_pred_cntr[,6]))+ ggtitle("Control Functioning distribution")+ xlim(-10,10))
+
+
 plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
   #draws from posterior predictive (CS)
   f_pred_trt <-  rstan::extract(sampled, "f_pred")%>%
@@ -137,13 +158,13 @@ plot_cs <- function(sampled, y, response, data, backtrans = FALSE){
   
   data.frame(f =y[todo],
              missing = is.na(y[todo]),
-             age = factor(d$caregiver, levels = c(0,1), labels = c("Younger", "Older")),
+             age = factor(d$caregiver, levels = c(1,0), labels = c("Older","Younger")),
              lb_trt =   apply(f_pred_trt , 2, "quantile", c(0.05)),
              ub_trt =   apply(f_pred_trt , 2, "quantile", c(0.95)),
              lb_notrt = apply(f_pred_cntr, 2, "quantile", c(0.05)),
              ub_notrt = apply(f_pred_cntr, 2, "quantile", c(0.95))) %>%
     arrange(age, ub_notrt)%>%
-    mutate(id = c(1:sum(d$caregiver == 0), 1:sum(d$caregiver == 1))) %>%
+    mutate(id = c(1:sum(d$caregiver == 1), 1:sum(d$caregiver == 0))) %>%
     subset(missing == FALSE)%>%
     ggplot() +
     geom_errorbar(aes(x=id, ymin=lb_trt, ymax=ub_trt), colour = "grey50") +
