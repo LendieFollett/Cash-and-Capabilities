@@ -1,9 +1,9 @@
 README
 ================
-Lendie Follett, Heath Henderson
-6/5/2020
 
-# Cash and Capabilities
+
+
+# A New Kind of Impact Evaluation
 
 Bayesian framework for estimating overall capabilities as well as
 treatment effects on capabilities, choices, and functionings in the
@@ -23,56 +23,39 @@ setwd(). For example,
 setwd("/Users/Follett/Documents/Research/BSFA")
 ```
 
-Within this a “output” subdirectory, create two new folders named
-“Original” and “Matched”. This is where the corresponding results and
-plots will be saved.
+Within this directory, create two new folders named "Original" and "Matched". This is where the corresponding results and plots will be saved.
 
 Before you can load the packages, you will need to install them if you
 have not already done so. Code may look like:
 
 ``` r
 install.packages("rstan") #MCMC sampling
-install.packages("ggplot2") #graphics
+install.packages("tidyverse") #graphics, piping, summaries, data manipulation
 install.packages("reshape2") #wide-to-long melting
-install.packages("plyr") #data manipulation
-install.packages("dplyr") #piping, data manipulation
 install.packages("tidyr") #data manipulation
 install.packages("randomForest") #estimate propensity scores
 install.packages("Matching") #matching treatment, control groups
-install.packages("loo") #leave one out crossvalidation
 ```
 
 After each package is installed you can proceed with the code in
-analysis.R starting with
+analysis.R starting with loading each of the above packages.
 
-``` r
-library(rstan) #MCMC sampling
-library(ggplot2) #graphics
-library(reshape2) #wide-to-long melting
-library(plyr) #data manipulation
-library(dplyr) #piping, data manipulation
-library(tidyr) #data manipulation
-library(randomForest) #estimate propensity scores
-library(Matching) #matching treatment, control groups
-library(loo) #leave one out crossvalidation
-```
 
-analysis.R will then source functions.R, which contains functions for
+
+- analysis.R will source functions.R, which contains functions for
 stan sampling, treatment effect estimation, and plot creation.
 
-Sampling begins with code chunk
+Model estimation begins with code chunk that looks like
 
 ``` r
-food_sampled <- do_sampling(y=ihs_trans(kenya$food),
-                            X=full_X, 
-                            X_cntr = full_X_cntr,
-                            hh_id=kenya$hhcode, loc_id=kenya$location, kappa = 10,
-                            file = "BSFA_model.stan")
+diversity_sampled <- do_sampling(y=y_stand(kenya$diversity, kenya),
+                                 X=full_X, 
+                                 X_cntr = full_X_cntr,
+                                 hh_id=kenya$hhcode, loc_id=kenya$location,
+                                 file = "src/selection_model2.stan", kappa = 1)
 ```
 
 Running this should result in 4 chains being distributed across 4 cores:
-
-![](Screen%20Shot%202020-06-05%20at%202.53.01%20PM.png)
 
 The rest of the code will fit the models for the remaining responses and
 create graphics and tables present in the manuscript.

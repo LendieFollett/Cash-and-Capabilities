@@ -12,7 +12,7 @@ library(randomForest)
 library(Matching)
 library(bayesplot)
 library(scales)
-source("src/old/functions_old.R")
+source("src/functions.R")
 options(mc.cores = parallel::detectCores()) 
 rstan_options(auto_write = TRUE)
 options(warn=-1)
@@ -21,69 +21,8 @@ options(warn=-1)
 kenya <- read.csv("raw_data/ctovc_final_cg.csv")
 
 
-# Random forest propensity ---------------------------
-
-#Pre propensity/distance matching
-
-kenya_sub <- kenya %>%  
-  subset(year == 0, select = c("hhcode","treated","caregiver","hhsize", "non_active", "head_educ","depend_ratio", "sex_ratio",
-                               "ovc", "initial_exp",
-                               "adult_educ", "rooms", "head_sex", "head_married", "head_sick",'elderly',
-                               'agriculture', 'salaried', 'casual', 'self',
-                               "age_5under", "age_0617", "age_1834", "age_3549", "age_5064",
-                               'transfers', 'land', 'livestock', 'water', 'bike', 'radio', 'phone', 'mosquito', 'road',
-                               'market', 'communication', 'electricity'))%>% `rownames<-`(seq_len(sum(kenya$year == 0)))
-
-# RANDOM FOREST
-#trying random forest because: (1) interactions are built in (2) no need for transformations / linearity (3) deals with NAs if we do this step pre imputation
-set.seed(22375)
-rf <- randomForest(as.factor(treated) ~ ., data = kenya_sub[,-1],
-                   ntree = 1000,
-                   proximity = TRUE,
-                   seed=48394639)
-pscores_rf <- predict(rf, type = "prob")[,2]
-head(pscores_rf)
-# n <- names(data.frame( pscores_rf, rf$proximity))
-# f <- as.formula(paste("treated ~", paste(n[!n %in% c("treated")], collapse = " + ")))
-# matches_rf1 <- matchit(f, method = "nearest", data=data.frame(treated = kenya_sub$treated, pscores_rf, rf$proximity))
-# dta_m <- match.data(matches_rf1)
-#RF 
-set.seed(9235728)
-matches_rf <- Match(Y = NULL, Tr= 1-kenya_sub$treated, X = pscores_rf,replace = FALSE, caliper = 1)
-
-matched_rf <- rbind(kenya_sub[matches_rf$index.treated,],
-                    kenya_sub[matches_rf$index.control,])
-#matched_rf <- kenya_sub[pscores_rf > quantile(pscores_rf, .2) & pscores_rf < quantile(pscores_rf, .8),] #didn't work as well
-
-std_diffs_1 <- kenya_sub[,-1]  %>%
-  melt(id.var = "treated") %>%
-  group_by(variable, treated)%>%
-  summarise(meanvariable = mean(value),
-            varvariable = var(value),
-            n = length(value),
-            c025 = quantile(value, .025),
-            c975 = quantile(value, 0.975)) %>% 
-  ungroup()%>%
-  gather(variable2, value, -(treated:variable)) %>%
-  unite(temp, variable2, treated) %>%
-  spread(temp, value)%>%
-  mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2),
-         lrsd = log(sqrt(varvariable_1)/sqrt(varvariable_0)),
-         variablef = reorder(variable, std_diff),
-         method = "Original")
-
-#calculate TCP
-std_diffs_tcp <- kenya_sub[,-1]  %>%
-  melt(id.var = "treated") %>% 
-  filter(treated == 1) %>% 
-  merge(std_diffs_1[,c("variable", "c025_0", "c975_0")]) %>% 
-  group_by(variable) %>% 
-  summarise(TCP = mean(value < c025_0 | value >c975_0 )) 
-
-std_diffs <- merge(std_diffs_1, std_diffs_tcp, by = "variable")
-
-
-#------------ compare-----------
+#------------  Random forest propensity score matching -----------
+#------------ covariate imbalance -----------
 
 # SEE HOW MEAN DIFFERENCES, DISTRIBUTIONS CHANGE 
 
@@ -100,6 +39,30 @@ std_diffs_orig <- kenya_sub[,-1] %>%
   mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2), #two variances
          variablef = reorder(variable, abs(std_diff)),
          method = "Original")
+
+std_diffs_rf <- matched_rf[,-1] %>%
+  melt(id.var = "treated") %>%
+  group_by(variable, treated)%>%
+  summarise(meanvariable = mean(value),
+            varvariable = var(value),
+            n = length(value)) %>% 
+  ungroup()%>%
+  gather(variable2, value, -(treated:variable)) %>%
+  unite(temp, variable2, treated) %>%
+  spread(temp, value)%>%
+  mutate(std_diff = (meanvariable_1-meanvariable_0)/sqrt(varvariable_0/2 + varvariable_1/2), #two variances
+         variablef = reorder(variable, abs(std_diff)),
+         method = "Matched")
+
+rbind(std_diffs_orig,
+      std_diffs_rf)%>%
+  subset(variable != "initial_exp")%>%
+  ggplot() + 
+  geom_point(aes(x = variablef, y = abs(std_diff),  fill = method), 
+             colour = "black", shape=21, stroke=1.1, size = 4) + 
+  scale_fill_manual("",values = c("black", "white")) +
+  coord_flip() + labs(y = "Absolute Normalized Difference in Means", x = "X variable") + theme_bw()
+ggsave( "Prop_matching.pdf", width = 9, height =7, units = "in" )
 
 
 
@@ -155,18 +118,18 @@ std_diffs%>%
   xtable() %>% print(include.rownames=FALSE)
 
 
-# X matrix ---------------------------
+#------------  X matrix ---------------------------
 
 median_age <- median(filter(kenya, sample_nutrition == 1)$caregiver)
 
 kenya$caregiver <- ifelse(kenya$caregiver >=median_age, 1, 0) #1 if older
 #based on matching or not, what hh codes are we using?
-usehh <-unique(kenya$hhcode) #if using whole data set
-#usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
+#usehh <-unique(kenya$hhcode) #if using whole data set
+usehh <- unique(matched_rf$hhcode)  # if using matching scheme matched_rf
 kenya <- subset(kenya, hhcode %in% usehh)
 
 #what folder should the rstan RDS files be safed
-subfolder <- "Original"#"Matched"#
+subfolder <- "Matched"#"Original"#
 
 full_X <- kenya%>%
   mutate(land = ihs_trans(land),
@@ -210,10 +173,7 @@ full_X_cntr <- kenya%>%
 
 #RUN STAN MODELS
 
-#tto save space, only keep specified parameters; "lp__" is automatically included
-#par_keep <- c("f_pred","f_pred_cntr", "c", "c_cntr","u", "u_cntr","beta",
-#              "sigma_a", "sigma_v", "sigma_l", 
-#              "gamma1", "gamma2", "phi", "rho", "mu_a", "alpha", "tau")
+#to save space, only keep specified parameters; "lp__" is automatically included
 par_keep <- c("f_pred","f_pred_cntr", 
               #"c", "c_cntr",
               #"u", "u_cntr",
@@ -406,6 +366,10 @@ ggsave(paste(subfolder,"cal_animv_CS_UNTRANSFORMED.pdf", sep = "/" ))
 plot_cs(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=FALSE) 
 ggsave(paste(subfolder,"cal_micro_CS_UNTRANSFORMED.pdf", sep = "/" ))
 
+plot_cs(sampled=diversity_sampled,       y=y_stand(kenya$diversity, kenya),      response =  "dietary diversity",       data = kenya, backtrans = FALSE)
+ggsave(paste(subfolder,"diversity_CS_UNTRANSFORMED.pdf", sep = "/" ))
+
+
 
 #capability set plots AGGREGATED
 plot_cs_agg(sampled=underweight_sampled, y = nutrition_data$underweight, response = "underweight",data = nutrition_data)
@@ -439,6 +403,11 @@ ggsave(paste(subfolder,"cal_animv_CS_agg_UNTRANSFORMED.pdf", sep = "/" ))
 
 plot_cs_agg(sampled=cal_micro_sampled,       y=ihs_trans(kenya$cal_micro_windsor),      response =  "micronutrients",       data = kenya, backtrans=FALSE) 
 ggsave(paste(subfolder,"cal_micro_CS_agg_UNTRANSFORMED.pdf", sep = "/" ))
+
+
+plot_cs_agg(sampled=diversity_sampled,       y=y_stand(kenya$diversity, kenya),      response =  "dietary diversity",       data = kenya, backtrans = FALSE)
+ggsave(paste(subfolder,"diversity_CS_agg_UNTRANSFORMED.pdf", sep = "/" ))
+
 ###############################################
 
 trt <- rbind(   
@@ -507,4 +476,22 @@ filter(trt, by != "Overall") %>%
   labs(x = "", y = "Treatment Effect") 
 ggsave(paste(subfolder, "trt_effects.pdf", sep = "/"), width = 9, height =7, units = "in" )
 
+
+# make treatment table
+
+df_formatted <- ss %>%
+  mutate(value = sprintf("%.3f (%.2f)", post_mean, post_prob_greater_0))
+
+
+df_wide <- df_formatted %>%
+  dplyr::select(y, type, by, value) %>%
+  pivot_wider(names_from = by, values_from = value)
+
+
+df_wide <- df_wide %>%
+  arrange(y, type) %>% 
+  dplyr::select(y, type, Overall, Older, Younger)
+library(knitr)
+# Step 4: Print LaTeX table using kable
+kable(df_wide, format = "latex", booktabs = TRUE, escape = FALSE)
 
