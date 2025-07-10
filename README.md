@@ -41,7 +41,7 @@ After each package is installed you can proceed with the code in
 analysis.R starting with loading each of the above packages.
 
 
-
+- anthro.do includes the code that is used to compute caloric variables.
 - analysis.R will source functions.R, which contains functions for
 stan sampling, treatment effect estimation, and plot creation.
 
